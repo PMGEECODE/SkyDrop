@@ -1,0 +1,60 @@
+{
+  "name": "skydrop-desktop",
+  "version": "1.0.0",
+  "description": "SkyDrop - Fast, private local file drop for Linux and mobile",
+  "homepage": "https://github.com/famage/skydrop",
+  "author": {
+    "name": "SkyDrop Team",
+    "email": "dev@skydrop.local"
+  },
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "NODE_ENV=development electron .",
+    "test": "node tests/desktop.test.js",
+    "build:daemon": "cd ../daemon && go build -o ../desktop/bin/skydrop-daemon ./cmd/daemon",
+    "dist": "npm run build:daemon && electron-builder --linux",
+    "dist:appimage": "npm run build:daemon && electron-builder --linux AppImage",
+    "dist:deb": "npm run build:daemon && electron-builder --linux deb"
+  },
+  "keywords": [
+    "file-transfer",
+    "airdrop",
+    "skydrop",
+    "local-network",
+    "electron"
+  ],
+  "license": "MIT",
+  "build": {
+    "appId": "com.famage.skydrop",
+    "productName": "SkyDrop",
+    "directories": {
+      "output": "dist"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "maintainer": "SkyDrop Team <dev@skydrop.local>",
+      "category": "Network",
+      "synopsis": "Seamless local network file dropping",
+      "icon": "assets/icon.png"
+    },
+    "extraResources": [
+      {
+        "from": "bin/skydrop-daemon",
+        "to": "bin/skydrop-daemon"
+      }
+    ],
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  }
+}

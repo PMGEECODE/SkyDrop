@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SkyDrop</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/screens.css">
+  <link rel="stylesheet" href="css/previews.css">
+</head>
+<body>
+
+  <!-- Splash Screen (Same size as the desktop app) -->
+  <div id="splash-screen" class="splash-screen" aria-hidden="true">
+    <div class="splash-backdrop-glow"></div>
+    <div class="splash-content">
+      <div class="splash-logo-wrapper">
+        <img src="assets/SkyDropLogo_withText.png" alt="SkyDrop" class="splash-logo">
+        <div class="splash-shimmer-ring"></div>
+      </div>
+      <div class="splash-loader-bar">
+        <div class="splash-loader-indicator"></div>
+      </div>
+      <span class="splash-tagline">Fast, Private Local File Drop</span>
+    </div>
+  </div>
+
+  <!-- Frameless Title Bar -->
+  <header class="titlebar">
+    <div class="titlebar-brand">
+      <img src="assets/logo.png" alt="SkyDrop" class="brand-logo-img">
+      <span class="brand-title">SkyDrop</span>
+      <div id="status-dot" class="brand-status-dot" title="Connected to SkyDrop Daemon"></div>
+    </div>
+    <div class="titlebar-controls">
+      <button id="btn-theme" class="titlebar-btn" title="Toggle Theme">🌙</button>
+      <button id="btn-minimize" class="titlebar-btn" title="Minimize">−</button>
+      <button id="btn-close" class="titlebar-btn close" title="Close to Tray">✕</button>
+    </div>
+  </header>
+
+  <!-- Main Screen Viewport -->
+  <main class="app-content">
+
+    <!-- Screen 1: Devices -->
+    <section id="screen-devices" class="screen active">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Nearby Devices</h2>
+          <span class="section-subtitle">Wi-Fi & Local Peer Discovery</span>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <button id="btn-diagnose" class="btn-tiny" style="padding: 6px 10px;" title="Export Diagnostics Report">Diagnose</button>
+          <button id="btn-manual-peer" class="btn-tiny" style="padding: 6px 10px;" title="Manual IP Fallback">Manual IP</button>
+          <button id="btn-pair-new" class="btn-primary" style="width: auto; padding: 6px 12px; font-size: 12px;">+ Pair Device</button>
+        </div>
+      </div>
+
+      <!-- Screen reader presence announcements -->
+      <div id="presence-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+      <div id="connection-banner" class="status-banner offline">
+        <span>⚪</span> <span id="banner-text">Searching local network for peers...</span>
+      </div>
+
+      <div id="paired-devices-container">
+        <!-- Injected via devices-view.js -->
+      </div>
+
+      <div id="discovered-devices-container">
+        <!-- Injected via devices-view.js -->
+      </div>
+    </section>
+
+    <!-- Screen 2: Send -->
+    <section id="screen-send" class="screen">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Send Files</h2>
+          <span class="section-subtitle">Drop instantly to nearby peers</span>
+        </div>
+      </div>
+
+      <!-- Target Device Selector -->
+      <div class="target-select-card">
+        <span style="font-size: 12px; font-weight: 600;">Target Peer:</span>
+        <select id="target-peer-select" class="select-input">
+          <option value="">Choose device...</option>
+        </select>
+      </div>
+
+      <!-- Drag & Drop Zone -->
+      <div id="dropzone" class="dropzone">
+        <span class="dropzone-icon">☁️</span>
+        <span class="dropzone-text">Drag & drop files here</span>
+        <span class="dropzone-subtext">or click to browse filesystem</span>
+      </div>
+
+      <!-- Queued Files Shelf -->
+      <div id="file-queue-container" class="file-queue" style="display: none;">
+        <!-- Injected via send-view.js -->
+      </div>
+
+      <!-- Live Transfer Progress Card -->
+      <div id="send-progress-card" class="progress-card">
+        <div class="progress-header">
+          <span id="send-progress-filename" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Sending file...</span>
+          <span id="send-progress-percent">0%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div id="send-progress-bar" class="progress-bar-fill"></div>
+        </div>
+      </div>
+
+      <!-- Send Error Card -->
+      <div id="send-error-card" class="card" style="display: none; border-left: 3px solid var(--color-danger); margin-top: 8px; padding: 10px;">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between;">
+          <div style="display: flex; align-items: flex-start; gap: 8px;">
+            <span style="font-size: 16px;">⚠️</span>
+            <div>
+              <div id="send-error-title" style="font-size: 13px; font-weight: 600; color: var(--color-danger);">Transfer Failed</div>
+              <div id="send-error-message" style="font-size: 12px; color: var(--text-primary); margin-top: 2px;"></div>
+            </div>
+          </div>
+          <button id="btn-dismiss-error" class="btn-icon" style="font-size: 12px; cursor: pointer; background: transparent; border: none; color: var(--text-muted);">✕</button>
+        </div>
+        <details id="send-error-details" style="margin-top: 8px; font-size: 11px; color: var(--text-muted); cursor: pointer;">
+          <summary style="font-weight: 600;">Technical Details</summary>
+          <pre id="send-error-raw" style="margin-top: 6px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; overflow-x: auto; white-space: pre-wrap; font-family: monospace;"></pre>
+        </details>
+      </div>
+
+      <!-- Send Action Button -->
+      <button id="btn-send-now" class="btn-primary" disabled style="height: 44px; font-size: 14px; margin-top: auto;">
+        ⚡ Drop Files
+      </button>
+    </section>
+
+    <!-- Screen 3: Received -->
+    <section id="screen-received" class="screen">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Received Files</h2>
+          <span class="section-subtitle">Saved to Downloads/SkyDrop</span>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <button id="btn-select-mode" class="btn-tiny" title="Multi-select mode">Select</button>
+          <button id="btn-clear-history" class="btn-tiny" title="Clear History">Clear</button>
+        </div>
+      </div>
+
+      <!-- Live Inbound Receiving Progress Banner -->
+      <div id="receive-progress-card" class="progress-card receive-progress-banner">
+        <div class="progress-header">
+          <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+            <span style="font-size: 16px;">📥</span>
+            <div style="min-width: 0; flex: 1;">
+              <div id="receive-progress-filename" style="font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Receiving file...</div>
+              <div id="receive-progress-meta" style="font-size: 11px; color: var(--text-muted); margin-top: 1px;">0% (0 B / 0 B)</div>
+            </div>
+          </div>
+          <span id="receive-progress-percent" style="font-size: 13px; font-weight: 700; color: var(--color-primary); margin-left: 10px;">0%</span>
+        </div>
+        <div class="progress-bar-bg" style="margin-top: 6px;">
+          <div id="receive-progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
+        </div>
+      </div>
+
+      <!-- Received Toolbar: Search, View Mode, Density, Sort -->
+      <div class="received-toolbar">
+        <div class="search-input-wrap">
+          <input type="text" id="received-search" class="input-text search-input" placeholder="Search by filename...">
+        </div>
+        <div class="toolbar-actions">
+          <!-- Grid / List View Toggle -->
+          <div class="view-toggle-group">
+            <button id="btn-view-grid" class="view-btn active" title="Grid View" aria-label="Grid View">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            </button>
+            <button id="btn-view-list" class="view-btn" title="List View" aria-label="List View">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            </button>
+          </div>
+
+          <!-- Density Controls -->
+          <div class="density-group" title="Grid Density">
+            <button class="density-btn" data-density="compact" title="Compact">S</button>
+            <button class="density-btn active" data-density="comfortable" title="Comfortable">M</button>
+            <button class="density-btn" data-density="large" title="Large">L</button>
+          </div>
+
+          <!-- Sort Select -->
+          <select id="received-sort" class="select-sort" title="Sort files">
+            <option value="newest">Newest</option>
+            <option value="name">Name</option>
+            <option value="size">Size</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Filter Chips -->
+      <div class="filter-chips-container" role="tablist" aria-label="Filter by file type">
+        <button class="filter-chip active" data-category="all">All</button>
+        <button class="filter-chip" data-category="images">Images</button>
+        <button class="filter-chip" data-category="videos">Videos</button>
+        <button class="filter-chip" data-category="documents">Docs</button>
+        <button class="filter-chip" data-category="audio">Audio</button>
+        <button class="filter-chip" data-category="archives">Archives</button>
+        <button class="filter-chip" data-category="other">Other</button>
+      </div>
+
+      <!-- Floating Multi-select Toolbar -->
+      <div id="selection-toolbar" class="selection-toolbar">
+        <span id="selection-count" class="selection-count">0 selected</span>
+        <div class="selection-actions">
+          <button id="sel-select-all" class="btn-tiny">Select All</button>
+          <button id="sel-send" class="btn-tiny">Send</button>
+          <button id="sel-delete-history" class="btn-tiny">Remove</button>
+          <button id="sel-delete-disk" class="btn-tiny danger">Delete Disk</button>
+          <button id="sel-cancel" class="btn-tiny">✕</button>
+        </div>
+      </div>
+
+      <div id="received-list-container" style="flex: 1; overflow-y: auto;">
+        <!-- Injected via received-view.js -->
+      </div>
+    </section>
+
+    <!-- Screen 4: Settings -->
+    <section id="screen-settings" class="screen">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Settings</h2>
+          <span class="section-subtitle">App & Daemon Configuration</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">Destination Folder</span>
+            <span id="settings-storage-dir" class="setting-desc" style="max-width: 220px; word-break: break-all;">Downloads/SkyDrop</span>
+          </div>
+          <button id="btn-change-folder" class="btn-tiny">Browse...</button>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">Device Name</span>
+            <span class="setting-desc">Visible to nearby devices</span>
+          </div>
+          <div style="display: flex; gap: 4px;">
+            <input type="text" id="settings-device-name" class="input-text" style="width: 120px;" placeholder="Laptop">
+            <button id="btn-save-device-name" class="btn-tiny">Save</button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">Auto-Accept Drops</span>
+            <span class="setting-desc">Require one-time PIN pairing</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="settings-require-pair" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">Start on Login</span>
+            <span class="setting-desc">Launch SkyDrop on system boot</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="settings-autostart">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">Thumbnail Cache</span>
+            <span id="thumb-cache-stats" class="setting-desc">Calculating...</span>
+          </div>
+          <button id="btn-clear-thumb-cache" class="btn-tiny" title="Clear cached thumbnails">Clear Cache</button>
+        </div>
+      </div>
+
+      <!-- App Branding Info -->
+      <div class="card" style="display: flex; align-items: center; gap: 14px; padding: 14px; margin-top: auto; margin-bottom: 12px;">
+        <img src="assets/logo.png" alt="SkyDrop Logo" style="width: 44px; height: 44px; object-fit: contain;">
+        <div style="flex: 1; min-width: 0;">
+          <img src="assets/SkyDropText.png" alt="SkyDrop" style="height: 18px; object-fit: contain; display: block;">
+          <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">High-speed local peer-to-peer drop • v1.0.0</span>
+        </div>
+      </div>
+
+      <!-- Daemon Status Info -->
+      <div class="card">
+        <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Daemon Status</span>
+        <div style="margin-top: 6px; font-size: 11px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px;">
+          <div>• Port: <strong id="stat-port">8443 (HTTPS)</strong></div>
+          <div>• Status: <strong id="stat-daemon" style="color: var(--color-success);">Running & Supervised</strong></div>
+          <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">• Fingerprint: <span id="stat-fingerprint" style="font-family: monospace;">-</span></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom Navigation Tab Bar -->
+  <nav id="tab-bar" class="tab-bar">
+    <button class="tab-btn active" data-screen="screen-devices">
+      <span class="tab-icon">📱</span>
+      <span class="tab-label">Devices</span>
+    </button>
+    <button class="tab-btn" data-screen="screen-send">
+      <span class="tab-icon">📤</span>
+      <span class="tab-label">Send</span>
+    </button>
+    <button class="tab-btn" data-screen="screen-received">
+      <span class="tab-icon">📥</span>
+      <span class="tab-label">Received</span>
+      <span id="received-badge" class="tab-badge" style="display: none;">0</span>
+    </button>
+    <button class="tab-btn" data-screen="screen-settings">
+      <span class="tab-icon">⚙️</span>
+      <span class="tab-label">Settings</span>
+    </button>
+  </nav>
+
+  <!-- QR Code Pair Modal -->
+  <div id="modal-pair" class="modal-overlay">
+    <div class="modal-card center-content">
+      <div id="pair-modal-content" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+        <img src="assets/logo.png" alt="SkyDrop" style="width: 44px; height: 44px; margin-bottom: 8px; object-fit: contain;">
+        <h3 class="modal-title">Pair New Device</h3>
+        <p class="modal-desc">Scan with the SkyDrop mobile app or enter PIN</p>
+        <div class="qr-container">
+          <img id="pair-qr-img" class="qr-img" src="" alt="Pairing QR Code">
+        </div>
+        <div id="pair-pin-text" class="pin-display">------</div>
+        <button id="btn-copy-pairing-uri" class="btn-primary">📋 Copy Pairing Code</button>
+        <button id="btn-close-modal" class="btn-secondary">Close</button>
+      </div>
+      <div id="pair-modal-success" class="pair-success-view" style="display: none;">
+        <div class="pair-success-icon-wrap">
+          <svg class="pair-success-svg" viewBox="0 0 52 52">
+            <circle class="pair-success-circle" cx="26" cy="26" r="24" fill="none"/>
+            <path class="pair-success-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+          </svg>
+        </div>
+        <h3 class="pair-success-title">🎉 Paired Successfully!</h3>
+        <p id="pair-success-device" class="pair-success-device">Phone</p>
+        <p class="pair-success-sub">Device verified and connected. Closing...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manual Peer Modal -->
+  <div id="modal-manual-peer" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Add Manual Device</h3>
+        <button id="btn-close-manual-x" class="modal-close-btn" title="Close">✕</button>
+      </div>
+      <p class="modal-desc" style="margin-top: -6px;">Connect directly via IP address when mDNS is slow or disabled</p>
+      <div style="display: flex; flex-direction: column; gap: 10px; margin: 14px 0; text-align: left;">
+        <div>
+          <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Device IP Address</label>
+          <input type="text" id="manual-peer-ip" class="input-text" placeholder="e.g. 192.168.74.18" style="width: 100%; box-sizing: border-box; margin-top: 4px;">
+        </div>
+        <div>
+          <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Port (Default: 8444 for Android, 8443 for Desktop)</label>
+          <input type="number" id="manual-peer-port" class="input-text" value="8444" style="width: 100%; box-sizing: border-box; margin-top: 4px;">
+        </div>
+        <div>
+          <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Device Name (Optional)</label>
+          <input type="text" id="manual-peer-name" class="input-text" placeholder="e.g. Phone" style="width: 100%; box-sizing: border-box; margin-top: 4px;">
+        </div>
+      </div>
+      <button id="btn-save-manual-peer" class="btn-primary" style="margin-bottom: 8px;">Add Device</button>
+      <button id="btn-close-manual-modal" class="btn-secondary">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Modal: Diagnostics Report -->
+  <div id="modal-diagnostics" class="modal-overlay">
+    <div class="modal-card modal-card-diagnostics">
+      <div class="modal-header">
+        <div class="modal-header-left">
+          <span style="font-size: 16px;">🩺</span>
+          <h3 class="modal-title">System Diagnostics</h3>
+        </div>
+        <button id="btn-close-diagnostics-modal" class="modal-close-btn" title="Close Diagnostics">✕</button>
+      </div>
+      <div class="diagnostics-meta-bar">
+        <div class="diagnostics-health-tag">
+          <span id="diagnostics-health-dot" class="health-dot"></span>
+          <span id="diagnostics-health-label">System Operational</span>
+        </div>
+        <span id="diagnostics-timestamp" style="color: var(--text-muted); font-size: 10px;"></span>
+      </div>
+      <div id="diagnostics-content" class="diagnostics-viewer"></div>
+      <div style="margin-top: 12px; display: flex; gap: 8px;">
+        <button id="btn-copy-diagnostics" class="btn-primary" style="flex: 1; height: 38px; font-size: 13px;">📋 Copy Report</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Context Menu for Items -->
+  <div id="context-menu" class="context-menu">
+    <div id="ctx-open" class="context-menu-item">▶ Open</div>
+    <div id="ctx-preview" class="context-menu-item">👁️ Quick Preview</div>
+    <div id="ctx-folder" class="context-menu-item">📁 Show in Folder</div>
+    <div id="ctx-copy-path" class="context-menu-item">📋 Copy Path</div>
+    <div id="ctx-send-again" class="context-menu-item">📤 Send Again</div>
+    <div id="ctx-delete" class="context-menu-item danger">🗑️ Delete from History</div>
+    <div id="ctx-delete-disk" class="context-menu-item danger">⚠️ Delete from Disk</div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/file-icons.js"></script>
+  <script src="js/lightbox.js"></script>
+  <script src="js/devices-view.js"></script>
+  <script src="js/send-view.js"></script>
+  <script src="js/received-view.js"></script>
+  <script src="js/settings-view.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

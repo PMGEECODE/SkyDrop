@@ -1,0 +1,83 @@
+# ==========================================
+# SkyDrop Root GitIgnore
+# ==========================================
+
+# ------------------------------------------
+# Operating System & IDE Files
+# ------------------------------------------
+.DS_Store
+.DS_Store?
+ehthumbs.db
+Thumbs.db
+*.swp
+*.bak
+*.tmp
+*.temp
+*~
+
+# JetBrains / Android Studio / IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+.idea_modules/
+
+# VSCode
+.vscode/
+
+# ------------------------------------------
+# Build Outputs & Binary Files
+# ------------------------------------------
+/build/
+**/build/
+/bin/
+**/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.deb
+*.rpm
+*.snap
+*.appimage
+*.AppImage
+
+# ------------------------------------------
+# Android & Gradle
+# ------------------------------------------
+.gradle/
+**/.gradle/
+**/captures/
+**/.externalNativeBuild/
+**/.cxx/
+local.properties
+**/local.properties
+
+# Android Output Packages & Keys
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# ------------------------------------------
+# Desktop (Node.js / Electron)
+# ------------------------------------------
+node_modules/
+**/node_modules/
+desktop/dist/
+desktop/out/
+desktop/coverage/
+desktop/.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ------------------------------------------
+# Daemon & Runtime
+# ------------------------------------------
+.skydrop/
+**/.skydrop/

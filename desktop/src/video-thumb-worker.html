@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Video Thumbnail Worker</title>
+</head>
+<body style="margin: 0; background: black;">
+  <video id="video-el" style="display: none;" muted playsinline></video>
+  <canvas id="canvas-el" style="display: none;"></canvas>
+  <script>
+    const { ipcRenderer } = require('electron');
+    const video = document.getElementById('video-el');
+    const canvas = document.getElementById('canvas-el');
+    const ctx = canvas.getContext('2d');
+
+    ipcRenderer.on('capture-video-frame', async (event, { taskId, fileUrl, targetSize }) => {
+      let isCompleted = false;
+
+      const finish = (result) => {
+        if (isCompleted) return;
+        isCompleted = true;
+        video.src = '';
+        ipcRenderer.send('video-frame-captured', { taskId, result });
+      };
+
+      const timeout = setTimeout(() => {
+        finish({ success: false, error: 'Video frame capture timed out' });
+      }, 5000);
+
+      video.onerror = () => {
+        clearTimeout(timeout);
+        finish({ success: false, error: 'Video decoding error' });
+      };
+
+      video.onloadedmetadata = () => {
+        const duration = video.duration || 1;
+        const seekTime = Math.min(1.0, Math.max(0.1, duration * 0.1));
+        video.currentTime = seekTime;
+      };
+
+      video.onseeked = () => {
+        clearTimeout(timeout);
+        try {
+          const vw = video.videoWidth || 300;
+          const vh = video.videoHeight || 300;
+          const maxDim = targetSize || 300;
+
+          let dw = maxDim;
+          let dh = maxDim;
+          if (vw >= vh) {
+            dh = Math.round((vh / vw) * maxDim);
+          } else {
+            dw = Math.round((vw / vh) * maxDim);
+          }
+
+          canvas.width = dw;
+          canvas.height = dh;
+          ctx.drawImage(video, 0, 0, dw, dh);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          finish({ success: true, dataUrl, duration: video.duration || 0 });
+        } catch (err) {
+          finish({ success: false, error: err.message });
+        }
+      };
+
+      video.src = fileUrl;
+      video.load();
+    });
+  </script>
+</body>
+</html>
