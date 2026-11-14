@@ -7,6 +7,10 @@ class SendView {
     this.dropzone = document.getElementById('dropzone');
     this.queueContainer = document.getElementById('file-queue-container');
     this.targetSelect = document.getElementById('target-peer-select');
+    this.customSelect = document.getElementById('custom-target-select');
+    this.customSelectTrigger = document.getElementById('custom-select-trigger');
+    this.customSelectLabel = document.getElementById('custom-select-label');
+    this.customSelectMenu = document.getElementById('custom-select-menu');
     this.sendBtn = document.getElementById('btn-send-now');
     this.progressCard = document.getElementById('send-progress-card');
     this.progressFilename = document.getElementById('send-progress-filename');
@@ -26,35 +30,23 @@ class SendView {
   }
 
   initEvents() {
+    // Prevent default browser drag-and-drop behavior on document body
+    document.addEventListener('dragover', (e) => e.preventDefault());
+    document.addEventListener('drop', (e) => e.preventDefault());
+
     // Click on dropzone to open native file dialog
-    this.dropzone.addEventListener('click', () => this.browseFiles());
+    if (this.dropzone) {
+      this.dropzone.addEventListener('click', () => this.browseFiles());
 
-    // HTML5 Drag and Drop events
-    this.dropzone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.dropzone.classList.add('drag-active');
-    });
-
-    this.dropzone.addEventListener('dragleave', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.dropzone.classList.remove('drag-active');
-    });
-
-    this.dropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.dropzone.classList.remove('drag-active');
-
-      if (e.dataTransfer && e.dataTransfer.files) {
+      const processDroppedFiles = (files) => {
+        if (!files || files.length === 0) return;
         const newFiles = [];
-        for (let i = 0; i < e.dataTransfer.files.length; i++) {
-          const file = e.dataTransfer.files[i];
-          // In Electron, file.path contains the absolute filesystem path
-          if (file.path) {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const filePath = file.path || (window.skydrop && window.skydrop.getPathForFile ? window.skydrop.getPathForFile(file) : '');
+          if (filePath) {
             newFiles.push({
-              path: file.path,
+              path: filePath,
               name: file.name,
               size: file.size
             });
@@ -63,26 +55,73 @@ class SendView {
         if (newFiles.length > 0) {
           this.addFiles(newFiles);
         }
-      }
-    });
+      };
 
-    this.targetSelect.addEventListener('change', () => this.updateSendButtonState());
+      this.dropzone.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        this.dropzone.classList.add('drag-active');
+      });
 
-    this.sendBtn.addEventListener('click', () => this.sendQueue());
+      this.dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'copy';
+        }
+        this.dropzone.classList.add('drag-active');
+      });
 
-    // Listen for progress from main process
-    window.skydrop.onTransferProgress((prog) => {
-      this.progressCard.classList.add('active');
-      this.progressFilename.textContent = `Sending: ${prog.filename}`;
-      this.progressPercent.textContent = `${prog.percent}%`;
-      this.progressBar.style.width = `${prog.percent}%`;
-    });
+      this.dropzone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        if (!this.dropzone.contains(e.relatedTarget)) {
+          this.dropzone.classList.remove('drag-active');
+        }
+      });
+
+      this.dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.dropzone.classList.remove('drag-active');
+        if (e.dataTransfer && e.dataTransfer.files) {
+          processDroppedFiles(e.dataTransfer.files);
+        }
+      });
+    }
+
+    if (this.customSelectTrigger) {
+      this.customSelectTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.customSelect) {
+          this.customSelect.classList.toggle('active');
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (this.customSelect && !this.customSelect.contains(e.target)) {
+          this.customSelect.classList.remove('active');
+        }
+      });
+    }
+
+    if (this.targetSelect) {
+      this.targetSelect.addEventListener('change', () => {
+        this.renderCustomSelectLabel();
+        this.updateSendButtonState();
+      });
+    }
+
+    if (this.sendBtn) {
+      this.sendBtn.addEventListener('click', () => this.sendQueue());
+    }
+
     if (this.dismissErrorBtn) {
       this.dismissErrorBtn.addEventListener('click', () => this.hideError());
     }
   }
 
   async browseFiles() {
+    const successCard = document.getElementById('send-success-card');
+    if (successCard) successCard.style.display = 'none';
+
     const files = await window.skydrop.selectFiles();
     if (files && files.length > 0) {
       this.addFiles(files);
@@ -90,6 +129,9 @@ class SendView {
   }
 
   addFiles(files) {
+    const successCard = document.getElementById('send-success-card');
+    if (successCard) successCard.style.display = 'none';
+
     for (const file of files) {
       if (!this.queuedFiles.some((f) => f.path === file.path)) {
         this.queuedFiles.push(file);
@@ -109,12 +151,18 @@ class SendView {
   }
 
   renderQueue() {
+    const warningEl = document.getElementById('large-queue-warning');
+    const warningTextEl = document.getElementById('large-queue-warning-text');
+
+    if (!this.queueContainer) return;
+
     if (this.queuedFiles.length === 0) {
       this.queueContainer.style.display = 'none';
       this.queueContainer.innerHTML = '';
       if (this.dropzone) {
         this.dropzone.classList.remove('compact');
       }
+      if (warningEl) warningEl.style.display = 'none';
     } else {
       this.queueContainer.style.display = 'flex';
       if (this.dropzone) {
@@ -124,6 +172,18 @@ class SendView {
       const totalBytes = this.queuedFiles.reduce((sum, f) => sum + (f.size || 0), 0);
       const fileCountText = `${this.queuedFiles.length} file${this.queuedFiles.length === 1 ? '' : 's'} queued`;
       const sizeText = formatBytes(totalBytes);
+
+      // Large Queue Size Warning (>100MB)
+      if (warningEl) {
+        if (totalBytes > 100 * 1024 * 1024) {
+          warningEl.style.display = 'flex';
+          if (warningTextEl) {
+            warningTextEl.textContent = `Total size: ${sizeText} across ${this.queuedFiles.length} file(s). Ensure recipient has enough free disk space.`;
+          }
+        } else {
+          warningEl.style.display = 'none';
+        }
+      }
 
       let html = `
         <div class="queue-toolbar">
@@ -155,7 +215,7 @@ class SendView {
                 ${pres.svg || (typeof SVG_ICONS !== 'undefined' ? SVG_ICONS.generic : '')}
               </div>
               <span class="queue-thumb-tag" style="background-color: ${pres.accent || 'var(--color-primary)'};">${displayLabel}</span>
-              ${pres.isVideo ? '<div class="video-play-badge">▶</div>' : ''}
+              ${pres.isVideo ? '<div class="video-play-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></div>' : ''}
             </div>
             <div class="queue-card-meta">
               <div class="queue-card-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</div>
@@ -164,7 +224,7 @@ class SendView {
                 <span class="queue-card-size">${formatBytes(f.size)}</span>
               </div>
             </div>
-            <button class="queue-btn-remove" title="Remove ${escapeHtml(f.name)}" onclick="window.sendView.removeFile(${idx})">✕</button>
+            <button class="queue-btn-remove" title="Remove ${escapeHtml(f.name)}" onclick="window.sendView.removeFile(${idx})"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
           </div>
         `;
       });
@@ -201,7 +261,7 @@ class SendView {
                 el.innerHTML = `
                   <img class="media-thumb-img" src="${dataUrl}" alt="thumbnail" loading="lazy">
                   <span class="queue-thumb-tag" style="background-color: ${pres.accent || 'var(--color-primary)'};">${pres.label || ''}</span>
-                  ${pres.isVideo ? '<div class="video-play-badge">▶</div>' : ''}
+                  ${pres.isVideo ? '<div class="video-play-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></div>' : ''}
                 `;
               }
             }
@@ -213,19 +273,56 @@ class SendView {
   }
 
   updatePeers(peersData) {
+    if (!this.targetSelect) return;
     this.peers = (peersData && peersData.peers) || [];
     const currentVal = this.targetSelect.value;
+
     let optionsHtml = '<option value="">Choose target device...</option>';
+    let menuHtml = '';
 
     for (const p of this.peers) {
       const isOnline = p.is_connected;
       const isPaired = p.is_paired;
+      const isSelected = p.id === currentVal;
       const label = `${p.name} ${isOnline ? '(Online)' : '(Offline)'} ${isPaired ? '• Paired' : ''}`;
-      optionsHtml += `<option value="${p.id}" ${p.id === currentVal ? 'selected' : ''} ${!isOnline ? 'disabled' : ''}>${escapeHtml(label)}</option>`;
+
+      optionsHtml += `<option value="${p.id}" ${isSelected ? 'selected' : ''} ${!isOnline ? 'disabled' : ''}>${escapeHtml(label)}</option>`;
+
+      const badgeClass = isOnline ? 'online' : 'offline';
+      const badgeText = isOnline ? (isPaired ? 'Paired' : 'Online') : 'Offline';
+
+      menuHtml += `
+        <div class="custom-select-option ${isSelected ? 'selected' : ''} ${!isOnline ? 'disabled' : ''}" data-value="${p.id}" data-online="${isOnline}">
+          <span>${escapeHtml(p.name)}</span>
+          <span class="option-badge ${badgeClass}">${badgeText}</span>
+        </div>
+      `;
+    }
+
+    if (this.peers.length === 0) {
+      menuHtml = '<div class="custom-select-option disabled" style="color: var(--text-muted);">Searching for nearby devices...</div>';
     }
 
     if (this.targetSelect.innerHTML !== optionsHtml) {
       this.targetSelect.innerHTML = optionsHtml;
+    }
+
+    if (this.customSelectMenu) {
+      this.customSelectMenu.innerHTML = menuHtml;
+
+      this.customSelectMenu.querySelectorAll('.custom-select-option[data-value]').forEach((opt) => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const val = opt.getAttribute('data-value');
+          const isOnline = opt.getAttribute('data-online') === 'true';
+          if (!isOnline) return;
+
+          this.targetSelect.value = val;
+          if (this.customSelect) this.customSelect.classList.remove('active');
+          this.renderCustomSelectLabel();
+          this.updateSendButtonState();
+        });
+      });
     }
 
     // Auto-select first online paired peer if none selected
@@ -235,22 +332,35 @@ class SendView {
         this.targetSelect.value = activePeer.id;
       }
     }
+
+    this.renderCustomSelectLabel();
     this.updateSendButtonState();
   }
 
+  renderCustomSelectLabel() {
+    if (!this.customSelectLabel) return;
+    const selectedPeer = this.peers.find((p) => p.id === this.targetSelect.value);
+    if (selectedPeer) {
+      this.customSelectLabel.textContent = selectedPeer.name;
+    } else {
+      this.customSelectLabel.textContent = 'Choose target device...';
+    }
+  }
+
   updateSendButtonState() {
+    if (!this.sendBtn) return;
     const hasFiles = this.queuedFiles.length > 0;
     const hasTarget = Boolean(this.targetSelect.value);
     this.sendBtn.disabled = !hasFiles || !hasTarget || this.isSending;
 
     if (this.isSending) {
-      this.sendBtn.textContent = 'Sending...';
+      this.sendBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> Sending...';
     } else if (hasFiles && hasTarget) {
       const target = this.peers.find((p) => p.id === this.targetSelect.value);
       const name = target ? target.name : 'Device';
-      this.sendBtn.textContent = `⚡ Drop ${this.queuedFiles.length} File(s) to ${name}`;
+      this.sendBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Drop ${this.queuedFiles.length} File(s) to ${escapeHtml(name)}`;
     } else {
-      this.sendBtn.textContent = '⚡ Drop Files';
+      this.sendBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Drop Files';
     }
   }
 
@@ -274,17 +384,60 @@ class SendView {
     const targetPeer = this.peers.find((p) => p.id === this.targetSelect.value);
     if (!targetPeer) return;
 
+    const progressStatsEl = document.getElementById('send-progress-stats');
+    const progressEtaEl = document.getElementById('send-progress-eta');
+    const successCard = document.getElementById('send-success-card');
+    const successSub = document.getElementById('send-success-sub');
+    const sendMoreBtn = document.getElementById('btn-send-more');
+
+    if (successCard) successCard.style.display = 'none';
+
     this.hideError();
     this.isSending = true;
     this.updateSendButtonState();
-    this.progressCard.classList.add('active');
+    if (this.progressCard) this.progressCard.classList.add('active');
 
     const targetUrl = targetPeer.baseUrl || `${targetPeer.is_tls ? 'https' : 'http'}://${targetPeer.host}:${targetPeer.port}`;
     const authToken = targetPeer.auth_token || '';
 
+    const startTime = Date.now();
+    const completedCount = this.queuedFiles.length;
+
+    // Listen for real-time streaming progress
+    let unsub = null;
+    if (window.skydrop && typeof window.skydrop.onTransferProgress === 'function') {
+      unsub = window.skydrop.onTransferProgress((prog) => {
+        if (!prog) return;
+        if (this.progressCard) this.progressCard.classList.add('active');
+        if (this.progressFilename) this.progressFilename.textContent = `Sending ${prog.filename || 'file'}...`;
+
+        const pct = prog.percent || 0;
+        if (this.progressPercent) this.progressPercent.textContent = `${pct}%`;
+        if (this.progressBar) this.progressBar.style.width = `${pct}%`;
+
+        const elapsedSec = (Date.now() - startTime) / 1000;
+        const currentBytes = prog.bytesTransferred || 0;
+        const currentTotal = prog.totalBytes || 0;
+
+        if (elapsedSec > 0.2) {
+          const speedBps = currentBytes / elapsedSec;
+          const speedMb = (speedBps / (1024 * 1024)).toFixed(1);
+          const remainingBytes = Math.max(0, currentTotal - currentBytes);
+          const etaSec = speedBps > 0 ? Math.ceil(remainingBytes / speedBps) : 0;
+
+          if (progressStatsEl) {
+            progressStatsEl.textContent = `${formatBytes(currentBytes)} / ${formatBytes(currentTotal)} • ${speedMb} MB/s`;
+          }
+          if (progressEtaEl) {
+            progressEtaEl.textContent = `ETA ${etaSec < 10 ? '0' : ''}${etaSec}s`;
+          }
+        }
+      });
+    }
+
     try {
       for (const file of this.queuedFiles) {
-        this.progressFilename.textContent = `Sending ${file.name}...`;
+        if (this.progressFilename) this.progressFilename.textContent = `Sending ${file.name}...`;
         const res = await window.skydrop.sendFile(file.path, targetUrl, authToken);
         if (!res.ok) {
           let friendly = 'Failed to drop file.';
@@ -318,27 +471,41 @@ class SendView {
           const rawDetails = `Status Code: ${res.statusCode || 'N/A'}\nCategory: ${res.category || 'unknown'}\nTarget: ${res.targetUrl || targetUrl}\nError: ${res.error || 'Unknown error'}\n\nTechnical Details:\n${res.details || res.error || 'No further details'}`;
           console.error('[SkyDrop Send Error]', rawDetails);
           this.showError(title, friendly, rawDetails);
-          this.progressFilename.textContent = `❌ ${title}`;
+          if (this.progressFilename) this.progressFilename.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--color-danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> ${title}`;
           return;
         }
       }
+
+      // Success: Clear queue and render post-send completion state
       this.queuedFiles = [];
       this.renderQueue();
-      this.progressFilename.textContent = '✅ Transfer complete!';
-      this.progressPercent.textContent = '100%';
-      setTimeout(() => {
-        this.progressCard.classList.remove('active');
-        this.progressBar.style.width = '0%';
-        if (this.app && typeof this.app.switchTab === 'function') {
-          this.app.switchTab('screen-received');
+
+      if (this.progressCard) this.progressCard.classList.remove('active');
+
+      if (successCard) {
+        if (successSub) {
+          successSub.textContent = `✓ ${completedCount} file${completedCount === 1 ? '' : 's'} sent to ${escapeHtml(targetPeer.name)}`;
         }
-      }, 1500);
+        successCard.style.display = 'flex';
+
+        if (sendMoreBtn) {
+          sendMoreBtn.onclick = () => {
+            successCard.style.display = 'none';
+            this.browseFiles();
+          };
+        }
+      }
+
+      if (this.app && typeof this.app.switchTab === 'function') {
+        setTimeout(() => this.app.switchTab('screen-received'), 2500);
+      }
     } catch (err) {
       const errDetails = `Exception: ${err.message}\nStack: ${err.stack || ''}`;
       console.error('[SkyDrop Send Exception]', err);
       this.showError('Transfer Exception', err.message, errDetails);
-      this.progressFilename.textContent = '❌ Transfer error';
+      if (this.progressFilename) this.progressFilename.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--color-danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Transfer error';
     } finally {
+      if (typeof unsub === 'function') unsub();
       this.isSending = false;
       this.updateSendButtonState();
       this.app.refreshHistory();
@@ -352,6 +519,16 @@ function formatBytes(bytes) {
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 window.SendView = SendView;

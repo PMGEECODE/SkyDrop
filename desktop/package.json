@@ -1,8 +1,8 @@
 {
   "name": "skydrop-desktop",
-  "version": "1.0.0",
+  "version": "1.0.29",
   "description": "SkyDrop - Fast, private local file drop for Linux and mobile",
-  "homepage": "https://github.com/famage/skydrop",
+  "homepage": "https://github.com/PMGEECODE/skydrop",
   "author": {
     "name": "SkyDrop Team",
     "email": "dev@skydrop.local"
@@ -12,7 +12,10 @@
     "start": "electron .",
     "dev": "NODE_ENV=development electron .",
     "test": "node tests/desktop.test.js",
-    "build:daemon": "cd ../daemon && go build -o ../desktop/bin/skydrop-daemon ./cmd/daemon",
+    "bump": "node scripts/bump-version.js",
+    "build:daemon": "node scripts/build-daemon.js",
+    "build": "npm run dist:deb",
+    "build:all": "npm run dist",
     "dist": "npm run build:daemon && electron-builder --linux",
     "dist:appimage": "npm run build:daemon && electron-builder --linux AppImage",
     "dist:deb": "npm run build:daemon && electron-builder --linux deb"
@@ -40,6 +43,9 @@
       "category": "Network",
       "synopsis": "Seamless local network file dropping",
       "icon": "assets/icon.png"
+    },
+    "deb": {
+      "afterInstall": "build/debian/after-install.sh"
     },
     "extraResources": [
       {

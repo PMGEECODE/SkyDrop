@@ -1,6 +1,14 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('skydrop', {
+  getPathForFile: (file) => {
+    try {
+      if (webUtils && typeof webUtils.getPathForFile === 'function') {
+        return webUtils.getPathForFile(file);
+      }
+    } catch (_) {}
+    return file ? (file.path || '') : '';
+  },
   getPeers: () => ipcRenderer.invoke('get-peers'),
   addManualPeer: (peerData) => ipcRenderer.invoke('add-manual-peer', peerData),
   getPairSession: () => ipcRenderer.invoke('get-pair-session'),
@@ -23,6 +31,22 @@ contextBridge.exposeInMainWorld('skydrop', {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   getAutostart: () => ipcRenderer.invoke('get-autostart'),
   setAutostart: (openAtLogin) => ipcRenderer.invoke('set-autostart', openAtLogin),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  getUpdateSettings: () => ipcRenderer.invoke('get-update-settings'),
+  setUpdateSettings: (settings) => ipcRenderer.invoke('set-update-settings', settings),
+  downloadAndInstallUpdate: () => ipcRenderer.invoke('download-and-install-update'),
+  restartApp: () => ipcRenderer.invoke('restart-app'),
+  onUpdateProgress: (callback) => {
+    const subscription = (event, progress) => callback(progress);
+    ipcRenderer.on('update-progress', subscription);
+    return () => ipcRenderer.removeListener('update-progress', subscription);
+  },
+  onUpdateAvailable: (callback) => {
+    const subscription = (event, update) => callback(update);
+    ipcRenderer.on('update-available', subscription);
+    return () => ipcRenderer.removeListener('update-available', subscription);
+  },
   sendFile: (filePath, targetUrl, authToken) =>
     ipcRenderer.invoke('send-file', { filePath, targetUrl, authToken }),
   minimizeWindow: () => ipcRenderer.invoke('window-minimize'),
@@ -43,5 +67,20 @@ contextBridge.exposeInMainWorld('skydrop', {
     const subscription = (event, progress) => callback(progress);
     ipcRenderer.on('receive-progress', subscription);
     return () => ipcRenderer.removeListener('receive-progress', subscription);
+  },
+
+  // ── Clipboard ──────────────────────────────────────────────────────────────
+  clipboardList: () => ipcRenderer.invoke('clipboard-list'),
+  clipboardAdd: (text) => ipcRenderer.invoke('clipboard-add', text),
+  clipboardDelete: (id) => ipcRenderer.invoke('clipboard-delete', id),
+  clipboardClear: (keepPinned) => ipcRenderer.invoke('clipboard-clear', keepPinned),
+  clipboardPin: (id, pinned) => ipcRenderer.invoke('clipboard-pin', id, pinned),
+  clipboardSyncIds: () => ipcRenderer.invoke('clipboard-sync-ids'),
+  clipboardGetSettings: () => ipcRenderer.invoke('clipboard-get-settings'),
+  clipboardSetSettings: (s) => ipcRenderer.invoke('clipboard-set-settings', s),
+  onClipboardUpdate: (callback) => {
+    const sub = (_, data) => callback(data);
+    ipcRenderer.on('clipboard-update', sub);
+    return () => ipcRenderer.removeListener('clipboard-update', sub);
   }
 });

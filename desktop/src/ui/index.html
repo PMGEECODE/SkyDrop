@@ -34,9 +34,9 @@
       <div id="status-dot" class="brand-status-dot" title="Connected to SkyDrop Daemon"></div>
     </div>
     <div class="titlebar-controls">
-      <button id="btn-theme" class="titlebar-btn" title="Toggle Theme">🌙</button>
-      <button id="btn-minimize" class="titlebar-btn" title="Minimize">−</button>
-      <button id="btn-close" class="titlebar-btn close" title="Close to Tray">✕</button>
+      <button id="btn-theme" class="titlebar-btn" title="Toggle Theme"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg></button>
+      <button id="btn-minimize" class="titlebar-btn" title="Minimize"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+      <button id="btn-close" class="titlebar-btn close" title="Close to Tray"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
     </div>
   </header>
 
@@ -82,12 +82,21 @@
         </div>
       </div>
 
-      <!-- Target Device Selector -->
+      <!-- Custom Target Device Selector Card -->
       <div class="target-select-card">
         <span style="font-size: 12px; font-weight: 600;">Target Peer:</span>
-        <select id="target-peer-select" class="select-input">
+        <select id="target-peer-select" class="select-input" style="display: none;">
           <option value="">Choose device...</option>
         </select>
+        <div id="custom-target-select" class="custom-select">
+          <button id="custom-select-trigger" class="custom-select-trigger" type="button">
+            <span id="custom-select-label" class="custom-select-label">Choose target device...</span>
+            <span class="custom-select-arrow"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+          </button>
+          <div id="custom-select-menu" class="custom-select-menu">
+            <!-- Injected via send-view.js -->
+          </div>
+        </div>
       </div>
 
       <!-- Drag & Drop Zone -->
@@ -102,28 +111,51 @@
         <!-- Injected via send-view.js -->
       </div>
 
+      <!-- Large Queue Size Warning Banner -->
+      <div id="large-queue-warning" class="large-queue-warning" style="display: none;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-weight: 700; font-size: 12px; color: var(--text-main);">Large Queue Selected</div>
+          <div id="large-queue-warning-text" style="font-size: 11px; color: var(--text-muted);">Total size exceeds 100MB. Ensure target device has enough free storage.</div>
+        </div>
+      </div>
+
       <!-- Live Transfer Progress Card -->
       <div id="send-progress-card" class="progress-card">
         <div class="progress-header">
           <span id="send-progress-filename" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Sending file...</span>
           <span id="send-progress-percent">0%</span>
         </div>
-        <div class="progress-bar-bg">
+        <div class="progress-bar-track">
           <div id="send-progress-bar" class="progress-bar-fill"></div>
         </div>
+        <div class="progress-footer">
+          <span id="send-progress-stats">0 MB / 0 MB • 0 MB/s</span>
+          <span id="send-progress-eta">ETA --</span>
+        </div>
+      </div>
+
+      <!-- Post-Send Completion State -->
+      <div id="send-success-card" class="send-success-card" style="display: none;">
+        <div class="send-success-icon-wrap">
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        </div>
+        <div id="send-success-title" class="send-success-title">Transfer Complete!</div>
+        <div id="send-success-sub" class="send-success-sub">3 files transferred successfully</div>
+        <button id="btn-send-more" class="btn-primary" style="margin-top: 12px; width: auto; padding: 8px 20px;">Send More Files</button>
       </div>
 
       <!-- Send Error Card -->
       <div id="send-error-card" class="card" style="display: none; border-left: 3px solid var(--color-danger); margin-top: 8px; padding: 10px;">
         <div style="display: flex; align-items: flex-start; justify-content: space-between;">
           <div style="display: flex; align-items: flex-start; gap: 8px;">
-            <span style="font-size: 16px;">⚠️</span>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--color-danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
             <div>
               <div id="send-error-title" style="font-size: 13px; font-weight: 600; color: var(--color-danger);">Transfer Failed</div>
-              <div id="send-error-message" style="font-size: 12px; color: var(--text-primary); margin-top: 2px;"></div>
+              <div id="send-error-message" style="font-size: 12px; color: var(--text-main); margin-top: 2px;"></div>
             </div>
           </div>
-          <button id="btn-dismiss-error" class="btn-icon" style="font-size: 12px; cursor: pointer; background: transparent; border: none; color: var(--text-muted);">✕</button>
+          <button id="btn-dismiss-error" class="btn-icon" style="font-size: 12px; cursor: pointer; background: transparent; border: none; color: var(--text-muted);"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
         </div>
         <details id="send-error-details" style="margin-top: 8px; font-size: 11px; color: var(--text-muted); cursor: pointer;">
           <summary style="font-weight: 600;">Technical Details</summary>
@@ -133,7 +165,7 @@
 
       <!-- Send Action Button -->
       <button id="btn-send-now" class="btn-primary" disabled style="height: 44px; font-size: 14px; margin-top: auto;">
-        ⚡ Drop Files
+        Drop Files
       </button>
     </section>
 
@@ -190,12 +222,23 @@
             <button class="density-btn" data-density="large" title="Large">L</button>
           </div>
 
-          <!-- Sort Select -->
-          <select id="received-sort" class="select-sort" title="Sort files">
+          <!-- Custom Sort Select Component -->
+          <select id="received-sort" class="select-sort" style="display: none;">
             <option value="newest">Newest</option>
             <option value="name">Name</option>
             <option value="size">Size</option>
           </select>
+          <div id="custom-sort-select" class="custom-select custom-sort-select">
+            <button id="custom-sort-trigger" class="custom-select-trigger" type="button" style="padding: 4px 8px; font-size: 11px;">
+              <span id="custom-sort-label" class="custom-select-label">Newest</span>
+              <span class="custom-select-arrow"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+            </button>
+            <div id="custom-sort-menu" class="custom-select-menu" style="min-width: 100px;">
+              <div class="custom-select-option selected" data-sort="newest">Newest</div>
+              <div class="custom-select-option" data-sort="name">Name</div>
+              <div class="custom-select-option" data-sort="size">Size</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -227,6 +270,65 @@
       </div>
     </section>
 
+    <!-- Screen: Clipboard -->
+    <section id="screen-clipboard" class="screen">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Clipboard</h2>
+          <span class="section-subtitle">Synced local clipboard items</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span id="clipboard-sync-status" class="sync-badge synced">Synced</span>
+          <button id="clipboard-clear-btn" class="btn-tiny danger">Clear all</button>
+        </div>
+      </div>
+
+      <!-- Add Input Card -->
+      <div class="card" style="margin-bottom: 12px; padding: 12px;">
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="clipboard-add-input" class="input-text" placeholder="Type or paste text to sync..." maxlength="65536" style="flex: 1;">
+          <button id="clipboard-add-btn" class="btn-primary" style="padding: 0 16px; height: 36px;">Add</button>
+        </div>
+      </div>
+
+      <!-- Settings Card for Clipboard -->
+      <div class="card" style="margin-bottom: 12px; padding: 12px;">
+        <div class="setting-row" style="padding: 6px 0;">
+          <div class="setting-info">
+            <span class="setting-label">Sync Clipboard</span>
+            <span class="setting-desc">Share clipboard items with paired devices</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="clipboard-sync-toggle" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="setting-row" style="padding: 6px 0; border-top: 1px solid var(--border-color);">
+          <div class="setting-info">
+            <span class="setting-label">Auto-capture copied text</span>
+            <span class="setting-desc">Automatically add newly copied text from system clipboard</span>
+            <span class="capture-warning" id="clipboard-capture-warning" style="display: none; color: #f59e0b; font-size: 11px; margin-top: 4px;">
+              ⚠️ Automatically captures everything you copy, including passwords. Enable only on private machines.
+            </span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="clipboard-auto-capture-toggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Clipboard Items List -->
+      <div id="clipboard-items-list" class="clipboard-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+
+      <!-- Empty State -->
+      <div id="clipboard-empty-state" class="empty-state" style="display: none; padding: 32px 16px; text-align: center;">
+        <div class="empty-icon" style="font-size: 32px; margin-bottom: 8px;">📋</div>
+        <div class="empty-title" style="font-weight: 600; font-size: 14px;">No clipboard items yet</div>
+        <div class="empty-subtitle" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Copied text on this or paired devices will appear here.</div>
+      </div>
+    </section>
+
     <!-- Screen 4: Settings -->
     <section id="screen-settings" class="screen">
       <div class="section-header">
@@ -236,7 +338,31 @@
         </div>
       </div>
 
+      <!-- Settings Alert Banner -->
+      <div id="settings-alert" class="settings-alert" style="display: none; padding: 10px 12px; margin-bottom: 12px; border-radius: var(--radius-sm); font-size: 12px; line-height: 1.4;"></div>
+
       <div class="card">
+        <!-- Theme Mode Setting Row -->
+        <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+          <div class="setting-info">
+            <span class="setting-label">Theme</span>
+            <span class="setting-desc">Choose app appearance preference</span>
+          </div>
+          <div class="theme-segmented-control" role="radiogroup" aria-label="Theme preference">
+            <button class="theme-option" data-theme-val="light" type="button" title="Light Theme">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+              <span>LIGHT</span>
+            </button>
+            <button class="theme-option active" data-theme-val="system" type="button" title="System Preference">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+              <span>SYSTEM</span>
+            </button>
+            <button class="theme-option" data-theme-val="dark" type="button" title="Dark Theme">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+              <span>DARK</span>
+            </button>
+          </div>
+        </div>
         <div class="setting-row">
           <div class="setting-info">
             <span class="setting-label">Destination Folder</span>
@@ -291,8 +417,62 @@
       <div class="card" style="display: flex; align-items: center; gap: 14px; padding: 14px; margin-top: auto; margin-bottom: 12px;">
         <img src="assets/logo.png" alt="SkyDrop Logo" style="width: 44px; height: 44px; object-fit: contain;">
         <div style="flex: 1; min-width: 0;">
-          <img src="assets/SkyDropText.png" alt="SkyDrop" style="height: 18px; object-fit: contain; display: block;">
-          <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">High-speed local peer-to-peer drop • v1.0.0</span>
+          <img src="assets/SkyDropText.png" alt="SkyDrop" class="skydrop-wordmark" style="height: 18px; object-fit: contain; display: block;">
+          <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">High-speed local peer-to-peer drop • <span id="app-version-display">v1.0.0</span></span>
+        </div>
+      </div>
+
+      <!-- Software Updates Section -->
+      <div class="card" style="margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Software Updates</span>
+          <span id="update-status-badge" style="font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: var(--bg-surface-elevated); color: var(--text-secondary);">Idle</span>
+        </div>
+
+        <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+            <span style="color: var(--text-secondary);">Installed Version</span>
+            <strong id="update-current-version" style="color: var(--text-main); font-family: monospace;">-</strong>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+            <span style="color: var(--text-secondary);">Last Checked</span>
+            <span id="update-last-checked" style="color: var(--text-muted); font-size: 11px;">Never</span>
+          </div>
+
+          <div class="setting-row" style="padding: 6px 0; border: none; margin: 0;">
+            <div class="setting-info">
+              <span class="setting-label" style="font-size: 12px;">Check Automatically</span>
+              <span class="setting-desc" style="font-size: 10px;">Check for updates on application launch</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="settings-auto-update" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <!-- Update action / progress area -->
+          <div id="update-action-container" style="margin-top: 4px;">
+            <div style="display: flex; gap: 8px;">
+              <button id="btn-check-updates" class="btn-tiny" style="flex: 1; padding: 6px 12px; font-weight: 600;">Check for Updates</button>
+              <button id="btn-install-update" class="btn-tiny" style="display: none; flex: 1; background: var(--color-primary); color: #fff; border-color: var(--color-primary); padding: 6px 12px; font-weight: 600;">Download & Install</button>
+              <button id="btn-restart-app" class="btn-tiny" style="display: none; flex: 1; background: var(--color-success); color: #fff; border-color: var(--color-success); padding: 6px 12px; font-weight: 600;">Restart SkyDrop</button>
+            </div>
+          </div>
+
+          <!-- Progress bar -->
+          <div id="update-progress-container" style="display: none; margin-top: 6px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; color: var(--text-secondary);">
+              <span id="update-progress-text">Downloading update...</span>
+              <span id="update-progress-percent">0%</span>
+            </div>
+            <div style="height: 6px; width: 100%; background: var(--bg-surface-elevated); border-radius: 3px; overflow: hidden;">
+              <div id="update-progress-bar" style="height: 100%; width: 0%; background: var(--color-primary); transition: width 150ms ease;"></div>
+            </div>
+          </div>
+
+          <!-- Release notes / update message -->
+          <div id="update-message" style="display: none; margin-top: 6px; font-size: 11px; padding: 8px; border-radius: var(--radius-sm); line-height: 1.4;"></div>
         </div>
       </div>
 
@@ -302,6 +482,7 @@
         <div style="margin-top: 6px; font-size: 11px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px;">
           <div>• Port: <strong id="stat-port">8443 (HTTPS)</strong></div>
           <div>• Status: <strong id="stat-daemon" style="color: var(--color-success);">Running & Supervised</strong></div>
+          <div>• Version: <strong id="stat-version">-</strong></div>
           <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">• Fingerprint: <span id="stat-fingerprint" style="font-family: monospace;">-</span></div>
         </div>
       </div>
@@ -309,26 +490,35 @@
 
   </main>
 
-  <!-- Bottom Navigation Tab Bar -->
-  <nav id="tab-bar" class="tab-bar">
-    <button class="tab-btn active" data-screen="screen-devices">
-      <span class="tab-icon">📱</span>
-      <span class="tab-label">Devices</span>
-    </button>
-    <button class="tab-btn" data-screen="screen-send">
-      <span class="tab-icon">📤</span>
-      <span class="tab-label">Send</span>
-    </button>
-    <button class="tab-btn" data-screen="screen-received">
-      <span class="tab-icon">📥</span>
-      <span class="tab-label">Received</span>
-      <span id="received-badge" class="tab-badge" style="display: none;">0</span>
-    </button>
-    <button class="tab-btn" data-screen="screen-settings">
-      <span class="tab-icon">⚙️</span>
-      <span class="tab-label">Settings</span>
-    </button>
-  </nav>
+  <!-- Bottom Navigation Tab Bar Container -->
+  <div class="tab-bar-container">
+    <nav id="tab-bar" class="tab-bar">
+      <!-- Sliding Top Active Indicator Bar -->
+      <div id="tab-active-indicator" class="tab-active-indicator"></div>
+
+      <button class="tab-btn active" data-screen="screen-devices">
+        <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg></span>
+        <span class="tab-label">Devices</span>
+      </button>
+      <button class="tab-btn" data-screen="screen-send">
+        <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></span>
+        <span class="tab-label">Send</span>
+      </button>
+      <button class="tab-btn" data-screen="screen-received">
+        <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg></span>
+        <span id="received-badge" class="tab-badge" style="display: none;">0</span>
+        <span class="tab-label">Received</span>
+      </button>
+      <button class="tab-btn" data-screen="screen-clipboard">
+        <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>
+        <span class="tab-label">Clipboard</span>
+      </button>
+      <button class="tab-btn" data-screen="screen-settings">
+        <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></span>
+        <span class="tab-label">Settings</span>
+      </button>
+    </nav>
+  </div>
 
   <!-- QR Code Pair Modal -->
   <div id="modal-pair" class="modal-overlay">
@@ -426,6 +616,8 @@
   <script src="js/devices-view.js"></script>
   <script src="js/send-view.js"></script>
   <script src="js/received-view.js"></script>
+  <script src="js/clipboard-view-render.js"></script>
+  <script src="js/clipboard-view.js"></script>
   <script src="js/settings-view.js"></script>
   <script src="js/app.js"></script>
 </body>

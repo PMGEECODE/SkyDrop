@@ -42,12 +42,12 @@ class Lightbox {
               <button id="lightbox-zoom-reset" class="lightbox-btn" title="Reset Zoom (0)">100%</button>
               <button id="lightbox-zoom-in" class="lightbox-btn" title="Zoom In (+)">+</button>
             </div>
-            <button id="lightbox-close" class="lightbox-btn lightbox-btn-close" title="Close (Esc)">✕</button>
+            <button id="lightbox-close" class="lightbox-btn lightbox-btn-close" title="Close (Esc)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
           </div>
         </div>
         <div id="lightbox-content" class="lightbox-content"></div>
-        <button id="lightbox-prev" class="lightbox-nav-btn lightbox-nav-prev" title="Previous (Left Arrow)">❮</button>
-        <button id="lightbox-next" class="lightbox-nav-btn lightbox-nav-next" title="Next (Right Arrow)">❯</button>
+        <button id="lightbox-prev" class="lightbox-nav-btn lightbox-nav-prev" title="Previous (Left Arrow)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+        <button id="lightbox-next" class="lightbox-nav-btn lightbox-nav-next" title="Next (Right Arrow)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
       `;
       document.body.appendChild(el);
     }
@@ -145,14 +145,35 @@ class Lightbox {
     this.modal.querySelector('#lightbox-zoom-reset').textContent = '100%';
 
     const mediaUrl = `skydrop-media://local/${encodeURIComponent(item.saved_path)}`;
+    const pres = typeof window.getFileTypePresentation === 'function' ? window.getFileTypePresentation(item.filename) : {};
 
-    if (item.isVideo) {
+    const isVid = item.isVideo || pres.isVideo;
+    const isAud = item.isAudio || pres.isAudio;
+
+    if (isVid) {
       this.zoomControls.style.display = 'none';
       this.mediaContainer.innerHTML = `
-        <video id="lightbox-video" class="lightbox-video" controls autoplay playsinline>
+        <video id="lightbox-video" class="lightbox-video" controls autoplay playsinline style="max-width: 90vw; max-height: 80vh; border-radius: 8px; outline: none; box-shadow: var(--shadow-lg);">
           <source src="${mediaUrl}">
-          Your system cannot preview this video codec.
+          Your system cannot play this video codec.
         </video>
+      `;
+    } else if (isAud) {
+      this.zoomControls.style.display = 'none';
+      this.mediaContainer.innerHTML = `
+        <div class="audio-preview-card" style="background: var(--bg-surface); padding: 32px 40px; border-radius: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; align-items: center; gap: 16px; box-shadow: var(--shadow-lg); text-align: center; max-width: 380px; margin: auto;">
+          <div style="width: 72px; height: 72px; border-radius: 50%; background: rgba(6, 182, 212, 0.15); color: #06b6d4; display: flex; align-items: center; justify-content: center;">
+            <svg viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+          </div>
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--text-main); margin-bottom: 4px; word-break: break-all;">${item.filename}</div>
+            <div style="font-size: 11px; color: var(--text-muted);">${typeof formatBytes === 'function' ? formatBytes(item.size || 0) : ''}</div>
+          </div>
+          <audio controls autoplay style="width: 100%; max-width: 280px; margin-top: 8px; outline: none;">
+            <source src="${mediaUrl}">
+            Your system cannot play this audio format.
+          </audio>
+        </div>
       `;
     } else {
       this.zoomControls.style.display = 'flex';

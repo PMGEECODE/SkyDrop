@@ -81,11 +81,26 @@ class DaemonManager {
 
     console.log('[DaemonManager] Spawning daemon binary:', binPath);
     try {
+      let appVersion = '1.0.0';
+      try {
+        const { app } = require('electron');
+        if (app && typeof app.getVersion === 'function') {
+          appVersion = app.getVersion();
+        } else {
+          appVersion = require('../package.json').version;
+        }
+      } catch (_) {
+        try {
+          appVersion = require('../package.json').version;
+        } catch (_) {}
+      }
+
       this.childProcess = spawn(binPath, [], {
         env: {
           ...process.env,
           SKYDROP_PORT: String(this.port),
-          SKYDROP_ENABLE_TLS: this.useTLS ? 'true' : 'false'
+          SKYDROP_ENABLE_TLS: this.useTLS ? 'true' : 'false',
+          SKYDROP_VERSION: appVersion
         },
         stdio: ['ignore', 'pipe', 'pipe']
       });

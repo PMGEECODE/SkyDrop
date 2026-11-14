@@ -1,13 +1,25 @@
 package presence
 
 import (
+	"os"
 	"time"
 )
 
 const (
 	ProtocolVersion = "skydrop/v1"
-	AppVersion      = "1.1.0"
+)
 
+var (
+	AppVersion = "1.0.0"
+)
+
+func init() {
+	if envVer := os.Getenv("SKYDROP_VERSION"); envVer != "" {
+		AppVersion = envVer
+	}
+}
+
+const (
 	CapHealthV1        = "health_v1"
 	CapResumableUpload = "resumable_upload"
 	CapChecksumV1      = "checksum_v1"

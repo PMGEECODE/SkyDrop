@@ -34,8 +34,8 @@ class DevicesView {
         navigator.clipboard.writeText(this.currentPairingUri);
         const btn = document.getElementById('btn-copy-pairing-uri');
         const originalText = btn.textContent;
-        btn.textContent = '✅ Copied to Clipboard!';
-        setTimeout(() => (btn.textContent = originalText), 2000);
+        btn.innerHTML = '<span class="material-symbols-rounded" style="font-size: 14px; vertical-align: middle; margin-right: 4px;">check_circle</span> Copied!';
+        setTimeout(() => (btn.innerHTML = originalText), 2000);
       }
     });
 
@@ -87,8 +87,8 @@ class DevicesView {
           if (report) {
             navigator.clipboard.writeText(report);
             const orig = copyDiagBtn.textContent;
-            copyDiagBtn.textContent = '✅ Copied to Clipboard!';
-            setTimeout(() => (copyDiagBtn.textContent = orig), 2000);
+            copyDiagBtn.innerHTML = '<span class="material-symbols-rounded" style="font-size: 14px; vertical-align: middle; margin-right: 4px;">check_circle</span> Copied!';
+            setTimeout(() => (copyDiagBtn.innerHTML = orig), 2000);
           }
         });
       }

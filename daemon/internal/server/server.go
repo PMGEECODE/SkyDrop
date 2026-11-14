@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"skydrop/daemon/internal/client"
+	"skydrop/daemon/internal/clipboard"
 	"skydrop/daemon/internal/config"
 	"skydrop/daemon/internal/discovery"
 	"skydrop/daemon/internal/history"
@@ -34,6 +35,8 @@ type Server struct {
 	listener        net.Listener
 	isTransferring  func() bool
 	webCtrl         *web.WebController
+	clipboardMgr    *clipboard.Manager
+	clipboardWatcher *clipboard.Watcher
 }
 
 // NewServer initializes the server with storage, pairing manager, routes, and security configurations.
@@ -52,16 +55,28 @@ func NewServer(cfg *config.Config, store *storage.Storage, pm *security.PairMana
 	notifier := ui.NewNotifier()
 	histMgr, _ := history.NewManager(cfg.HistoryFile, 500)
 	presenceSvc := presence.NewService(pm, resolver, cfg.DeviceName, cfg.DeviceName)
+	clipStore, _ := clipboard.NewStore(cfg.ClipboardFile, 200)
+	clipMgr := clipboard.NewManager(clipStore, cfg, pm, uploader, presenceSvc)
+	clipWatcher := clipboard.NewWatcher()
+	if clipWatcher != nil {
+		clipWatcher.Start(func(text string) {
+			if clipMgr.GetSettings().AutoCapture && clipMgr.GetSettings().SyncEnabled {
+				_, _ = clipMgr.AddLocal(text, cfg.DeviceName)
+			}
+		})
+	}
 
 	s := &Server{
-		cfg:             cfg,
-		storage:         store,
-		pairManager:     pm,
-		resolver:        resolver,
-		uploader:        uploader,
-		notifier:        notifier,
-		history:         histMgr,
-		presenceService: presenceSvc,
+		cfg:              cfg,
+		storage:          store,
+		pairManager:      pm,
+		resolver:         resolver,
+		uploader:         uploader,
+		notifier:         notifier,
+		history:          histMgr,
+		presenceService:  presenceSvc,
+		clipboardMgr:     clipMgr,
+		clipboardWatcher: clipWatcher,
 	}
 
 	mux := http.NewServeMux()
@@ -73,6 +88,26 @@ func NewServer(cfg *config.Config, store *storage.Storage, pm *security.PairMana
 	mux.HandleFunc("/pair/start", s.handlePairStart)
 	mux.HandleFunc("/pair/confirm", s.handlePairConfirm)
 	mux.HandleFunc("/pair/peers", s.handleListPeers)
+
+	// Clipboard routes (authenticated for network peers)
+	mux.HandleFunc("/clipboard/add", s.requireAuth(s.handleClipboardAdd))
+	mux.HandleFunc("/clipboard/list", s.requireAuth(s.handleClipboardList))
+	mux.HandleFunc("/clipboard/delete", s.requireAuth(s.handleClipboardDelete))
+	mux.HandleFunc("/clipboard/clear", s.requireAuth(s.handleClipboardClear))
+	mux.HandleFunc("/clipboard/pin", s.requireAuth(s.handleClipboardPin))
+	mux.HandleFunc("/clipboard/sync", s.requireAuth(s.handleClipboardSync))
+	mux.HandleFunc("/clipboard/push", s.requireAuth(s.handleClipboardPush))
+	mux.HandleFunc("/clipboard/settings", s.requireAuth(s.handleClipboardSettings))
+
+	// Clipboard API routes for local Electron UI
+	mux.HandleFunc("/api/clipboard/add", s.handleClipboardAdd)
+	mux.HandleFunc("/api/clipboard/list", s.handleClipboardList)
+	mux.HandleFunc("/api/clipboard/delete", s.handleClipboardDelete)
+	mux.HandleFunc("/api/clipboard/clear", s.handleClipboardClear)
+	mux.HandleFunc("/api/clipboard/pin", s.handleClipboardPin)
+	mux.HandleFunc("/api/clipboard/sync", s.handleClipboardSync)
+	mux.HandleFunc("/api/clipboard/push", s.handleClipboardPush)
+	mux.HandleFunc("/api/clipboard/settings", s.handleClipboardSettings)
 
 	// Register web UI dashboard and client API
 	webCtrl := web.NewWebController(cfg, pm, resolver, uploader, notifier, histMgr)
@@ -147,6 +182,9 @@ func (s *Server) Start() error {
 
 // Shutdown gracefully stops the server.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.clipboardWatcher != nil {
+		s.clipboardWatcher.Stop()
+	}
 	if s.presenceService != nil {
 		s.presenceService.Stop()
 	}

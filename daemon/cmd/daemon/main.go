@@ -13,6 +13,7 @@ import (
 
 	"skydrop/daemon/internal/config"
 	"skydrop/daemon/internal/discovery"
+	"skydrop/daemon/internal/presence"
 	"skydrop/daemon/internal/server"
 	"skydrop/daemon/internal/storage"
 )
@@ -37,7 +38,7 @@ func main() {
 
 	// Prepare mDNS text records
 	txtRecords := []string{
-		"version=1.0.0",
+		fmt.Sprintf("version=%s", presence.AppVersion),
 		fmt.Sprintf("device=%s", cfg.DeviceName),
 		fmt.Sprintf("tls=%t", cfg.EnableTLS),
 	}

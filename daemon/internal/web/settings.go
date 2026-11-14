@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"skydrop/daemon/internal/presence"
 	"skydrop/daemon/internal/storage"
 )
 
@@ -23,6 +24,7 @@ type SettingsPayload struct {
 	Port           int    `json:"port"`
 	EnableTLS      bool   `json:"enable_tls"`
 	Fingerprint    string `json:"fingerprint,omitempty"`
+	Version        string `json:"version,omitempty"`
 }
 
 // handleSettings handles retrieval and updating of daemon configuration settings.
@@ -43,6 +45,7 @@ func (wc *WebController) handleSettings(w http.ResponseWriter, r *http.Request) 
 			Port:           wc.cfg.Port,
 			EnableTLS:      wc.cfg.EnableTLS,
 			Fingerprint:    wc.fingerprint,
+			Version:        presence.AppVersion,
 		})
 
 	case http.MethodPost:
@@ -98,6 +101,7 @@ func (wc *WebController) handleSettings(w http.ResponseWriter, r *http.Request) 
 			Port:           wc.cfg.Port,
 			EnableTLS:      wc.cfg.EnableTLS,
 			Fingerprint:    wc.fingerprint,
+			Version:        presence.AppVersion,
 		})
 
 	default:

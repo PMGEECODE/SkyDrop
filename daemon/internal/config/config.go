@@ -29,6 +29,8 @@ type Config struct {
 	EnableTLS         bool
 	PairedDevicesFile string
 	HistoryFile       string
+	ClipboardFile         string
+	ClipboardSettingsFile string
 	RequirePairing    bool
 	DiscoveryTXT      []string
 }
@@ -99,6 +101,16 @@ func LoadConfig() (*Config, error) {
 		historyFile = filepath.Join(skydropDir, "history.json")
 	}
 
+	clipboardFile := os.Getenv("SKYDROP_CLIPBOARD_FILE")
+	if clipboardFile == "" {
+		clipboardFile = filepath.Join(skydropDir, "clipboard.json")
+	}
+
+	clipboardSettingsFile := os.Getenv("SKYDROP_CLIPBOARD_SETTINGS_FILE")
+	if clipboardSettingsFile == "" {
+		clipboardSettingsFile = filepath.Join(skydropDir, "clipboard_settings.json")
+	}
+
 	requirePairing := true
 	if pairStr := os.Getenv("SKYDROP_REQUIRE_PAIRING"); pairStr != "" {
 		requirePairing = pairStr == "true" || pairStr == "1"
@@ -114,8 +126,10 @@ func LoadConfig() (*Config, error) {
 		MaxFileSize:       maxFileSize,
 		EnableTLS:         enableTLS,
 		PairedDevicesFile: pairedDevicesFile,
-		HistoryFile:       historyFile,
-		RequirePairing:    requirePairing,
+		HistoryFile:           historyFile,
+		ClipboardFile:         clipboardFile,
+		ClipboardSettingsFile: clipboardSettingsFile,
+		RequirePairing:        requirePairing,
 		DiscoveryTXT:      []string{"version=1.0.0", fmt.Sprintf("device=%s", deviceName)},
 	}
 

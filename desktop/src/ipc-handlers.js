@@ -212,8 +212,17 @@ function uploadFileToDaemon(daemonBaseUrl, targetUrl, authToken, filePath, onPro
   });
 }
 
-function registerIpcHandlers(mainWindow, daemonManager, thumbnailManager) {
+function registerIpcHandlers(mainWindow, daemonManager, thumbnailManager, autostartManager, updater) {
   const getBase = () => daemonManager.getBaseUrl();
+
+  if (!autostartManager) {
+    const AutostartManager = require('./autostart-manager');
+    autostartManager = new AutostartManager({ app });
+  }
+  if (!updater) {
+    const { Updater } = require('./updater');
+    updater = new Updater({ app });
+  }
 
   ipcMain.handle('get-peers', async () => {
     return requestDaemon(`${getBase()}/api/peers?scan=true`);
@@ -336,13 +345,52 @@ function registerIpcHandlers(mainWindow, daemonManager, thumbnailManager) {
   });
 
   ipcMain.handle('get-autostart', () => {
-    const settings = app.getLoginItemSettings();
-    return settings.openAtLogin;
+    return {
+      enabled: autostartManager.isEnabled(),
+      preference: autostartManager.getPreference()
+    };
   });
 
   ipcMain.handle('set-autostart', (event, openAtLogin) => {
-    app.setLoginItemSettings({ openAtLogin: Boolean(openAtLogin) });
-    return app.getLoginItemSettings().openAtLogin;
+    if (openAtLogin) {
+      return autostartManager.enable();
+    } else {
+      return autostartManager.disable();
+    }
+  });
+
+  ipcMain.handle('get-app-version', () => {
+    return (app && typeof app.getVersion === 'function') ? app.getVersion() : require('../package.json').version;
+  });
+
+  ipcMain.handle('check-for-updates', async () => {
+    return updater.checkGitHubUpdate();
+  });
+
+  ipcMain.handle('get-update-settings', () => {
+    return {
+      autoCheck: updater.isAutoCheckEnabled(),
+      lastCheckTime: updater.getLastCheckTime()
+    };
+  });
+
+  ipcMain.handle('set-update-settings', (event, settings) => {
+    if (settings && typeof settings.autoCheck === 'boolean') {
+      updater.setAutoCheckEnabled(settings.autoCheck);
+    }
+    return { ok: true };
+  });
+
+  ipcMain.handle('download-and-install-update', async () => {
+    return updater.downloadAndInstall((progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-progress', progress);
+      }
+    });
+  });
+
+  ipcMain.handle('restart-app', () => {
+    updater.restartApp();
   });
 
   ipcMain.handle('send-file', async (event, { filePath, targetUrl, authToken }) => {
@@ -417,6 +465,60 @@ function registerIpcHandlers(mainWindow, daemonManager, thumbnailManager) {
   }
 
   setTimeout(connectSSE, 1500);
+
+  // ── Clipboard IPC ──────────────────────────────────────────────────────────
+
+  ipcMain.handle('clipboard-list', async () => {
+    return requestDaemon(`${getBase()}/clipboard/list`);
+  });
+
+  ipcMain.handle('clipboard-add', async (_event, text) => {
+    if (typeof text !== 'string' || text.length === 0) {
+      return { ok: false, error: 'Text must be a non-empty string' };
+    }
+    if (Buffer.byteLength(text, 'utf8') > 65536) {
+      return { ok: false, error: 'Text exceeds 64 KB limit' };
+    }
+    return requestDaemon(`${getBase()}/clipboard/add`, 'POST', { text });
+  });
+
+  ipcMain.handle('clipboard-delete', async (_event, id) => {
+    if (typeof id !== 'string' || id.length === 0) {
+      return { ok: false, error: 'ID must be a non-empty string' };
+    }
+    return requestDaemon(`${getBase()}/clipboard/delete`, 'POST', { id });
+  });
+
+  ipcMain.handle('clipboard-clear', async (_event, keepPinned) => {
+    return requestDaemon(`${getBase()}/clipboard/clear`, 'POST', {
+      keep_pinned: keepPinned !== false
+    });
+  });
+
+  ipcMain.handle('clipboard-pin', async (_event, id, pinned) => {
+    if (typeof id !== 'string' || id.length === 0) {
+      return { ok: false, error: 'ID must be a non-empty string' };
+    }
+    return requestDaemon(`${getBase()}/clipboard/pin`, 'POST', {
+      id,
+      pinned: Boolean(pinned)
+    });
+  });
+
+  ipcMain.handle('clipboard-sync-ids', async () => {
+    return requestDaemon(`${getBase()}/clipboard/sync`);
+  });
+
+  ipcMain.handle('clipboard-get-settings', async () => {
+    return requestDaemon(`${getBase()}/clipboard/settings`);
+  });
+
+  ipcMain.handle('clipboard-set-settings', async (_event, settings) => {
+    if (!settings || typeof settings !== 'object') {
+      return { ok: false, error: 'Settings must be an object' };
+    }
+    return requestDaemon(`${getBase()}/clipboard/settings`, 'POST', settings);
+  });
 }
 
 module.exports = { registerIpcHandlers };

@@ -100,7 +100,8 @@ class ReceivedView {
     } else if (prog.status === 'completed') {
       this.progressCard.classList.add('active');
       if (this.progressFilename) {
-        this.progressFilename.textContent = `✅ Received: ${prog.filename || 'File'}`;
+        this.progressFilename.textContent = `Received: ${prog.filename || 'File'}`;
+        this.progressFilename.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> Received: ${escapeHtml(prog.filename || 'File')}`;
       }
       if (this.progressPercent) {
         this.progressPercent.textContent = '100%';
@@ -118,7 +119,8 @@ class ReceivedView {
       }, 2500);
     } else if (prog.status === 'failed') {
       if (this.progressFilename) {
-        this.progressFilename.textContent = `❌ Failed receiving: ${prog.filename || 'File'}`;
+        this.progressFilename.textContent = `Failed receiving: ${prog.filename || 'File'}`;
+        this.progressFilename.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--color-danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Failed receiving: ${escapeHtml(prog.filename || 'File')}`;
       }
       this.progressDismissTimer = setTimeout(() => {
         this.progressCard.classList.remove('active');
@@ -175,12 +177,43 @@ class ReceivedView {
       });
     });
 
-    // Sort selector
+    // Custom Sort selector
     const sortSelect = document.getElementById('received-sort');
-    if (sortSelect) {
-      sortSelect.addEventListener('change', (e) => {
-        this.sortBy = e.target.value;
-        this.applyFilterAndRender();
+    const customSort = document.getElementById('custom-sort-select');
+    const customSortTrigger = document.getElementById('custom-sort-trigger');
+    const customSortLabel = document.getElementById('custom-sort-label');
+    const customSortMenu = document.getElementById('custom-sort-menu');
+
+    if (customSortTrigger && customSortMenu) {
+      customSortTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (customSort) customSort.classList.toggle('active');
+      });
+
+      customSortMenu.querySelectorAll('.custom-select-option[data-sort]').forEach((opt) => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const sortVal = opt.getAttribute('data-sort');
+          this.sortBy = sortVal;
+
+          if (sortSelect) sortSelect.value = sortVal;
+          if (customSortLabel) {
+            const labels = { newest: 'Newest', name: 'Name', size: 'Size' };
+            customSortLabel.textContent = labels[sortVal] || sortVal;
+          }
+
+          customSortMenu.querySelectorAll('.custom-select-option').forEach((o) => o.classList.remove('selected'));
+          opt.classList.add('selected');
+
+          if (customSort) customSort.classList.remove('active');
+          this.applyFilterAndRender();
+        });
+      });
+
+      document.addEventListener('click', (e) => {
+        if (customSort && !customSort.contains(e.target)) {
+          customSort.classList.remove('active');
+        }
       });
     }
 
@@ -671,11 +704,11 @@ class ReceivedView {
                 ? `<img class="tile-thumb-img" src="${cachedThumb}" alt="thumbnail" loading="lazy" draggable="false">`
                 : `<div class="tile-placeholder-icon" style="color: ${pres.accent};">${pres.svg}</div>`
             }
-            ${pres.isVideo ? '<div class="video-play-badge">▶</div>' : ''}
+            ${pres.isVideo ? '<div class="video-play-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></div>' : ''}
           </div>
 
           <!-- Status Overlays -->
-          ${isFailed ? `<div class="tile-status-overlay tile-status-failed" title="${escapeHtml(item.error_message || 'Transfer failed')}">⚠️ Failed</div>` : ''}
+          ${isFailed ? `<div class="tile-status-overlay tile-status-failed" title="${escapeHtml(item.error_message || 'Transfer failed')}"><span class="material-symbols-rounded" style="font-size: 13px;">error</span> Failed</div>` : ''}
           ${isPending ? `<div class="tile-status-overlay tile-status-pending"><div class="mini-spinner"></div></div>` : ''}
 
           <!-- Tile Info Footer -->
@@ -721,7 +754,7 @@ class ReceivedView {
                   ? `<img class="media-thumb-img" src="${cachedThumb}" alt="thumbnail" loading="lazy" draggable="false">`
                   : `<span class="tile-placeholder-icon" style="color: ${pres.accent};">${pres.svg}</span>`
               }
-              ${pres.isVideo ? '<div class="video-play-badge">▶</div>' : ''}
+              ${pres.isVideo ? '<div class="video-play-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></div>' : ''}
             </div>
             <div class="history-details">
               <div class="history-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
@@ -828,7 +861,7 @@ class ReceivedView {
 
     thumbBox.innerHTML = `
       <img class="tile-thumb-img" src="${dataUrl}" alt="thumbnail" loading="lazy" draggable="false">
-      ${isVideo ? '<div class="video-play-badge">▶</div>' : ''}
+      ${isVideo ? '<div class="video-play-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></div>' : ''}
     `;
   }
 
@@ -859,13 +892,29 @@ class ReceivedView {
   }
 
   openPreview(item) {
-    const visualItems = this.filteredEntries.filter((x) => {
-      const p = window.getFileTypePresentation(x.filename);
-      return p.isVisual && x.saved_path;
+    if (!item) return;
+    const p = typeof window.getFileTypePresentation === 'function'
+      ? window.getFileTypePresentation(item.filename)
+      : {};
+
+    // Documents (PDFs, Text, Word, Excel, PPT, Code, Archives, APKs) -> Open in system default app (Browser, Text Editor, Office, etc.)
+    if (!p.isVisual && !p.isAudio) {
+      if (item.saved_path) {
+        this.openFile(item.saved_path);
+      }
+      return;
+    }
+
+    // Media Files (Images, Videos, Audio) -> Open in SkyDrop In-App Lightbox
+    const mediaItems = this.filteredEntries.filter((x) => {
+      const pres = window.getFileTypePresentation(x.filename);
+      return (pres.isVisual || pres.isAudio) && x.saved_path;
     });
-    const startIndex = visualItems.findIndex((x) => x.id === item.id);
+    const startIndex = mediaItems.findIndex((x) => x.id === item.id);
     if (startIndex !== -1) {
-      this.lightbox.open(visualItems, startIndex);
+      this.lightbox.open(mediaItems, startIndex);
+    } else if (item.saved_path) {
+      this.openFile(item.saved_path);
     }
   }
 

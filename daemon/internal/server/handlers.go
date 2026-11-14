@@ -90,7 +90,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, InfoResponse{
 		DeviceName:  s.cfg.DeviceName,
-		Version:     "1.0.0",
+		Version:     presence.AppVersion,
 		OS:          "linux",
 		Protocol:    "skydrop/v1",
 		TLSEnabled:  s.cfg.EnableTLS,
@@ -399,6 +399,13 @@ type PairConfirmResponse struct {
 func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.cfg.RequirePairing {
+			next(w, r)
+			return
+		}
+
+		// Allow loopback calls from local desktop UI without bearer token
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err == nil && (host == "127.0.0.1" || host == "::1" || host == "localhost") {
 			next(w, r)
 			return
 		}

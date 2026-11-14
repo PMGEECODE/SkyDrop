@@ -5,12 +5,20 @@ const TrayManager = require('./tray-manager');
 const ThumbnailManager = require('./thumbnail-manager');
 const { registerMediaProtocol } = require('./media-protocol');
 const { registerIpcHandlers } = require('./ipc-handlers');
+const AutostartManager = require('./autostart-manager');
+const { Updater } = require('./updater');
 
 let mainWindow = null;
 let daemonManager = null;
 let trayManager = null;
 let thumbnailManager = null;
+let autostartManager = null;
+let updater = null;
 app.isQuitting = false;
+
+// Enable Linux window transparency switches before app is ready
+app.commandLine.appendSwitch('enable-transparent-visuals');
+app.disableHardwareAcceleration();
 
 // Register privileged custom media scheme before app is ready
 protocol.registerSchemesAsPrivileged([
@@ -49,9 +57,10 @@ function createWindow() {
     minHeight: 520,
     frame: false,
     transparent: true,
-    resizable: true,
-    show: false,
     backgroundColor: '#00000000',
+    hasShadow: false,
+    resizable: false,
+    show: false,
     icon: path.join(__dirname, '../assets/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -63,9 +72,12 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'ui/index.html'));
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-  });
+  const isHiddenLaunch = process.argv.includes('--hidden') || process.argv.includes('--minimized') || process.argv.includes('--start-hidden');
+  if (!isHiddenLaunch) {
+    mainWindow.once('ready-to-show', () => {
+      mainWindow.show();
+    });
+  }
 
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
@@ -99,15 +111,34 @@ app.whenReady().then(async () => {
     }
   });
 
+  autostartManager = new AutostartManager({ app });
+  autostartManager.syncOnStartup();
+
+  updater = new Updater({ app });
+
   createWindow();
 
-  registerIpcHandlers(mainWindow, daemonManager, thumbnailManager);
+  registerIpcHandlers(mainWindow, daemonManager, thumbnailManager, autostartManager, updater);
 
   // Start Go daemon child process or connect to existing
   await daemonManager.start();
 
   trayManager = new TrayManager(mainWindow);
   trayManager.init();
+
+  // If auto-check is enabled, trigger background update check
+  if (updater.isAutoCheckEnabled()) {
+    setTimeout(async () => {
+      try {
+        const update = await updater.checkGitHubUpdate();
+        if (update && update.ok && update.updateAvailable && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-available', update);
+        }
+      } catch (err) {
+        console.warn('[Updater] Background check error:', err.message);
+      }
+    }, 5000);
+  }
 
   if (powerMonitor) {
     powerMonitor.on('resume', () => {

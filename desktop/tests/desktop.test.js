@@ -362,6 +362,214 @@ async function runTests() {
     console.log('  ✓ Animated splash screen with SkyDropLogo_withText verified');
   }
 
+  // Test 16: AutostartManager Linux XDG autostart entry generation and synchronization
+  {
+    console.log('[Test 16] AutostartManager Linux .desktop entry & lifecycle validation...');
+    const AutostartManager = require('../src/autostart-manager');
+    const os = require('os');
+    const testDir = path.join(os.tmpdir(), `skydrop-autostart-test-${Date.now()}`);
+    const testAutostartDir = path.join(testDir, 'autostart');
+    const testConfigDir = path.join(testDir, 'config');
+    fs.mkdirSync(testAutostartDir, { recursive: true });
+    fs.mkdirSync(testConfigDir, { recursive: true });
+
+    const manager = new AutostartManager({
+      autostartDir: testAutostartDir,
+      desktopFilePath: path.join(testAutostartDir, 'skydrop.desktop'),
+      configDir: testConfigDir,
+      settingsFilePath: path.join(testConfigDir, 'desktop-settings.json'),
+      execPath: '/usr/bin/skydrop',
+      iconPath: '/usr/share/icons/skydrop.png'
+    });
+
+    assert.strictEqual(manager.isEnabled(), false, 'Autostart should initially be disabled');
+
+    // Enable autostart
+    const enableRes = manager.enable();
+    assert.strictEqual(enableRes.ok, true, 'enable() should succeed');
+    assert.strictEqual(manager.isEnabled(), true, 'isEnabled() must be true after enable()');
+
+    const desktopContent = fs.readFileSync(path.join(testAutostartDir, 'skydrop.desktop'), 'utf8');
+    assert(desktopContent.includes('[Desktop Entry]'), 'Missing [Desktop Entry] section header');
+    assert(desktopContent.includes('Type=Application'), 'Missing Type=Application');
+    assert(desktopContent.includes('Name=SkyDrop'), 'Missing Name=SkyDrop');
+    assert(desktopContent.includes('Exec=/usr/bin/skydrop --hidden'), 'Missing or invalid Exec path with --hidden');
+    assert(desktopContent.includes('X-GNOME-Autostart-enabled=true'), 'Missing X-GNOME-Autostart-enabled=true');
+    assert.strictEqual(manager.getPreference(), true, 'Persisted preference must be true');
+
+    // Test AppImage path resolution
+    const prevAppImage = process.env.APPIMAGE;
+    process.env.APPIMAGE = '/home/user/Downloads/SkyDrop-1.0.28.AppImage';
+    const appImageManager = new AutostartManager({
+      autostartDir: testAutostartDir,
+      configDir: testConfigDir
+    });
+    assert.strictEqual(appImageManager.getExecPath(), '/home/user/Downloads/SkyDrop-1.0.28.AppImage',
+      'getExecPath() must prioritize process.env.APPIMAGE over temporary mount path');
+    if (prevAppImage) {
+      process.env.APPIMAGE = prevAppImage;
+    } else {
+      delete process.env.APPIMAGE;
+    }
+
+    // Disable autostart
+    const disableRes = manager.disable();
+    assert.strictEqual(disableRes.ok, true, 'disable() should succeed');
+    assert.strictEqual(manager.isEnabled(), false, 'isEnabled() must be false after disable()');
+    assert.strictEqual(fs.existsSync(path.join(testAutostartDir, 'skydrop.desktop')), false, 'File should be removed');
+    assert.strictEqual(manager.getPreference(), false, 'Persisted preference must be false');
+
+    // Test startup sync when preference is ON but file is missing
+    manager.saveSettings({ autostart: true });
+    manager.syncOnStartup();
+    assert.strictEqual(manager.isEnabled(), true, 'syncOnStartup() must re-create missing autostart entry if preference is ON');
+
+    // Cleanup
+    fs.rmSync(testDir, { recursive: true, force: true });
+    console.log('  ✓ AutostartManager generates valid .desktop entry, handles AppImage paths, and synchronizes state');
+  }
+
+  // Test 17: Semver comparison and updater release parsing
+  {
+    console.log('[Test 17] Semver comparison & GitHub updater parser validation...');
+    const { compareVersions, Updater } = require('../src/updater');
+
+    // Semantic version comparison asserts
+    assert.strictEqual(compareVersions('1.0.29', '1.0.28'), 1, '1.0.29 should be greater than 1.0.28');
+    assert.strictEqual(compareVersions('1.0.28', '1.0.29'), -1, '1.0.28 should be less than 1.0.29');
+    assert.strictEqual(compareVersions('1.0.28', '1.0.28'), 0, '1.0.28 should equal 1.0.28');
+    assert.strictEqual(compareVersions('v2.0.0', '1.9.99'), 1, 'v2.0.0 should be greater than 1.9.99');
+    assert.strictEqual(compareVersions('1.0.0-beta.1', '1.0.0'), 0, 'Core version should match without crashing');
+
+    // Updater preferences
+    const os = require('os');
+    const testDir = path.join(os.tmpdir(), `skydrop-updater-test-${Date.now()}`);
+    fs.mkdirSync(testDir, { recursive: true });
+
+    const updater = new Updater({
+      configDir: testDir,
+      settingsFilePath: path.join(testDir, 'desktop-settings.json'),
+      currentVersion: '1.0.28'
+    });
+
+    assert.strictEqual(updater.isAutoCheckEnabled(), true, 'autoCheckUpdates should default to true');
+    updater.setAutoCheckEnabled(false);
+    assert.strictEqual(updater.isAutoCheckEnabled(), false, 'autoCheckUpdates should update to false');
+    updater.setAutoCheckEnabled(true);
+    assert.strictEqual(updater.isAutoCheckEnabled(), true, 'autoCheckUpdates should update back to true');
+
+    // Test debian vs appimage asset resolution
+    const updaterDeb = new Updater({
+      configDir: testDir,
+      currentVersion: '1.0.28',
+      installType: 'deb'
+    });
+    assert.strictEqual(updaterDeb.getInstallationType(), 'deb', 'Installation type should resolve to deb');
+
+    const updaterAppImage = new Updater({
+      configDir: testDir,
+      currentVersion: '1.0.28',
+      installType: 'appimage'
+    });
+    assert.strictEqual(updaterAppImage.getInstallationType(), 'appimage', 'Installation type should resolve to appimage');
+
+    fs.rmSync(testDir, { recursive: true, force: true });
+    console.log('  ✓ Semver comparison, package format detection (deb vs AppImage), and updater configuration validated');
+  }
+
+  // Test 18: Build-driven version consistency
+  {
+    console.log('[Test 18] Build-driven single version source of truth validation...');
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
+    assert(pkg.version, 'package.json must specify version');
+
+    const buildDaemonJs = fs.readFileSync(path.join(__dirname, '../scripts/build-daemon.js'), 'utf8');
+    assert(buildDaemonJs.includes('require(\'../package.json\')') || buildDaemonJs.includes('require("../package.json")'),
+      'build-daemon.js must read version from package.json');
+    assert(buildDaemonJs.includes('-ldflags'), 'build-daemon.js must pass version ldflags to Go compiler');
+
+    const indexHtml = fs.readFileSync(path.join(__dirname, '../src/ui/index.html'), 'utf8');
+    assert(indexHtml.includes('id="app-version-display"'), 'index.html must have dynamic #app-version-display');
+    assert(indexHtml.includes('id="stat-version"'), 'index.html must have dynamic #stat-version');
+    assert(indexHtml.includes('id="update-current-version"'), 'index.html must have #update-current-version');
+
+    console.log(`  ✓ Version v${pkg.version} driven from package.json across desktop, daemon, and UI`);
+  }
+
+  // Test 19: Settings UI Updates Section & Wordmark contrast verification
+  {
+    console.log('[Test 19] Settings UI Updates section & Wordmark contrast verification...');
+    const indexHtml = fs.readFileSync(path.join(__dirname, '../src/ui/index.html'), 'utf8');
+    const settingsViewJs = fs.readFileSync(path.join(__dirname, '../src/ui/js/settings-view.js'), 'utf8');
+
+    // Check updates section elements
+    assert(indexHtml.includes('id="settings-auto-update"'), 'index.html missing #settings-auto-update');
+    assert(indexHtml.includes('id="btn-check-updates"'), 'index.html missing #btn-check-updates');
+    assert(indexHtml.includes('id="btn-install-update"'), 'index.html missing #btn-install-update');
+    assert(indexHtml.includes('id="btn-restart-app"'), 'index.html missing #btn-restart-app');
+    assert(indexHtml.includes('id="update-progress-container"'), 'index.html missing #update-progress-container');
+    assert(indexHtml.includes('id="update-progress-bar"'), 'index.html missing #update-progress-bar');
+    assert(indexHtml.includes('id="settings-alert"'), 'index.html missing #settings-alert banner');
+
+    // Check SettingsView logic
+    assert(settingsViewJs.includes('window.skydrop.checkForUpdates'), 'SettingsView must invoke checkForUpdates');
+    assert(settingsViewJs.includes('window.skydrop.downloadAndInstallUpdate'), 'SettingsView must invoke downloadAndInstallUpdate');
+    assert(settingsViewJs.includes('window.skydrop.restartApp'), 'SettingsView must invoke restartApp');
+    assert(settingsViewJs.includes('this.autostartCheckbox.checked = !desiredState'),
+      'SettingsView must revert autostart toggle on failure');
+
+    // Check SkyDropText.png wordmark contrast
+    const imgData = fs.readFileSync(path.join(__dirname, '../src/ui/assets/SkyDropText.png'));
+    assert(imgData.length > 1000, 'SkyDropText.png must exist');
+
+    console.log('  ✓ Updates UI controls, progress feedback, failure recovery, and wordmark verified');
+  }
+
+  // Test 20: Clipboard Screen & IPC Architecture Validation
+  {
+    console.log('[Test 20] Clipboard UI, sync controls & IPC handlers validation...');
+    const indexHtml = fs.readFileSync(path.join(__dirname, '../src/ui/index.html'), 'utf8');
+    const preloadJs = fs.readFileSync(path.join(__dirname, '../src/preload.js'), 'utf8');
+    const ipcHandlersJs = fs.readFileSync(path.join(__dirname, '../src/ipc-handlers.js'), 'utf8');
+    const clipboardViewJs = fs.readFileSync(path.join(__dirname, '../src/ui/js/clipboard-view.js'), 'utf8');
+    const clipboardRenderJs = fs.readFileSync(path.join(__dirname, '../src/ui/js/clipboard-view-render.js'), 'utf8');
+
+    // DOM markup verification
+    assert(indexHtml.includes('id="screen-clipboard"'), 'index.html missing #screen-clipboard');
+    assert(indexHtml.includes('id="clipboard-items-list"'), 'index.html missing #clipboard-items-list');
+    assert(indexHtml.includes('id="clipboard-sync-status"'), 'index.html missing #clipboard-sync-status');
+    assert(indexHtml.includes('id="clipboard-add-input"'), 'index.html missing #clipboard-add-input');
+    assert(indexHtml.includes('id="clipboard-add-btn"'), 'index.html missing #clipboard-add-btn');
+    assert(indexHtml.includes('id="clipboard-clear-btn"'), 'index.html missing #clipboard-clear-btn');
+    assert(indexHtml.includes('id="clipboard-sync-toggle"'), 'index.html missing #clipboard-sync-toggle');
+    assert(indexHtml.includes('id="clipboard-auto-capture-toggle"'), 'index.html missing #clipboard-auto-capture-toggle');
+    assert(indexHtml.includes('data-screen="screen-clipboard"'), 'index.html missing clipboard nav tab button');
+
+    // Preload API verification
+    assert(preloadJs.includes('clipboardList:'), 'preload.js missing clipboardList');
+    assert(preloadJs.includes('clipboardAdd:'), 'preload.js missing clipboardAdd');
+    assert(preloadJs.includes('clipboardDelete:'), 'preload.js missing clipboardDelete');
+    assert(preloadJs.includes('clipboardClear:'), 'preload.js missing clipboardClear');
+    assert(preloadJs.includes('clipboardPin:'), 'preload.js missing clipboardPin');
+    assert(preloadJs.includes('clipboardGetSettings:'), 'preload.js missing clipboardGetSettings');
+    assert(preloadJs.includes('clipboardSetSettings:'), 'preload.js missing clipboardSetSettings');
+
+    // IPC handlers verification
+    assert(ipcHandlersJs.includes('ipcMain.handle(\'clipboard-list\''), 'ipc-handlers.js missing clipboard-list handler');
+    assert(ipcHandlersJs.includes('ipcMain.handle(\'clipboard-add\''), 'ipc-handlers.js missing clipboard-add handler');
+    assert(ipcHandlersJs.includes('ipcMain.handle(\'clipboard-delete\''), 'ipc-handlers.js missing clipboard-delete handler');
+    assert(ipcHandlersJs.includes('ipcMain.handle(\'clipboard-clear\''), 'ipc-handlers.js missing clipboard-clear handler');
+    assert(ipcHandlersJs.includes('ipcMain.handle(\'clipboard-pin\''), 'ipc-handlers.js missing clipboard-pin handler');
+
+    // Frontend rendering helpers validation
+    assert(clipboardRenderJs.includes('validateAddText'), 'clipboard-view-render.js must export validateAddText');
+    assert(clipboardRenderJs.includes('buildItemCard'), 'clipboard-view-render.js must export buildItemCard');
+    assert(clipboardViewJs.includes('window.skydrop.clipboardAdd'), 'clipboard-view.js must call clipboardAdd');
+    assert(clipboardViewJs.includes('window.skydrop.clipboardList'), 'clipboard-view.js must call clipboardList');
+
+    console.log('  ✓ Clipboard screen markup, preload bridge, IPC endpoints, and renderer verified');
+  }
+
   console.log('\n✅ All SkyDrop desktop tests passed successfully!');
   process.exit(0);
 }

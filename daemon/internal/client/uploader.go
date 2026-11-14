@@ -379,3 +379,40 @@ func (u *Uploader) SendText(ctx context.Context, peerURL, text, authToken string
 
 	return nil
 }
+
+// PostClipboardItem transmits a clipboard payload to a peer's /clipboard/add endpoint.
+func (u *Uploader) PostClipboardItem(ctx context.Context, peerURL string, item interface{}, authToken string) error {
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return fmt.Errorf("failed to serialize clipboard item: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("%s/clipboard/add", peerURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("failed to create clipboard request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	if authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+
+	resp, err := u.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("clipboard post failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("clipboard post failed with HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// HTTPClient returns the configured http.Client instance.
+func (u *Uploader) HTTPClient() *http.Client {
+	return u.httpClient
+}
