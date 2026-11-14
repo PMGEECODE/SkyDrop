@@ -98,23 +98,39 @@ func isLocalAddress(host string) bool {
 	return false
 }
 
-// DiscoverPeers searches for peers advertising _filedrop._tcp for the given duration.
+// DiscoverPeers searches for peers advertising _filedrop._tcp and _skydrop._tcp for the given duration.
 func (pr *PeerResolver) DiscoverPeers(ctx context.Context, timeout time.Duration) ([]DiscoveredPeer, error) {
 	resolver, err := zeroconf.NewResolver(nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize zeroconf resolver: %w", err)
 	}
 
-	entries := make(chan *zeroconf.ServiceEntry)
 	searchCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	err = resolver.Browse(searchCtx, "_filedrop._tcp", "local.", entries)
-	if err != nil {
-		return nil, fmt.Errorf("failed to browse mDNS services: %w", err)
+	services := []string{"_filedrop._tcp", "_skydrop._tcp"}
+	merged := make(chan *zeroconf.ServiceEntry, 32)
+	var wg sync.WaitGroup
+
+	for _, svc := range services {
+		ch := make(chan *zeroconf.ServiceEntry, 16)
+		if err := resolver.Browse(searchCtx, svc, "local.", ch); err == nil {
+			wg.Add(1)
+			go func(c <-chan *zeroconf.ServiceEntry) {
+				defer wg.Done()
+				for e := range c {
+					merged <- e
+				}
+			}(ch)
+		}
 	}
 
-	for entry := range entries {
+	go func() {
+		wg.Wait()
+		close(merged)
+	}()
+
+	for entry := range merged {
 		var host string
 		if len(entry.AddrIPv4) > 0 {
 			host = entry.AddrIPv4[0].String()
@@ -127,6 +143,7 @@ func (pr *PeerResolver) DiscoverPeers(ctx context.Context, timeout time.Duration
 		isTLS := true
 		var fingerprint string
 		var peerOS string
+		var deviceID string
 
 		for _, txt := range entry.Text {
 			parts := strings.SplitN(txt, "=", 2)
@@ -138,11 +155,16 @@ func (pr *PeerResolver) DiscoverPeers(ctx context.Context, timeout time.Duration
 					fingerprint = parts[1]
 				case "os":
 					peerOS = parts[1]
+				case "device_id", "id":
+					deviceID = parts[1]
 				}
 			}
 		}
 
 		peerID := fmt.Sprintf("%s:%d", host, entry.Port)
+		if deviceID != "" {
+			peerID = deviceID
+		}
 		peer := DiscoveredPeer{
 			ID:          peerID,
 			Name:        entry.Instance,

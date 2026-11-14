@@ -40,7 +40,9 @@ func main() {
 	txtRecords := []string{
 		fmt.Sprintf("version=%s", presence.AppVersion),
 		fmt.Sprintf("device=%s", cfg.DeviceName),
+		fmt.Sprintf("device_id=%s", cfg.DeviceName),
 		fmt.Sprintf("tls=%t", cfg.EnableTLS),
+		"os=linux",
 	}
 	if srv.Fingerprint() != "" {
 		txtRecords = append(txtRecords, fmt.Sprintf("fingerprint=%s", srv.Fingerprint()))
