@@ -13,6 +13,7 @@ import (
 	"skydrop/daemon/internal/config"
 	"skydrop/daemon/internal/discovery"
 	"skydrop/daemon/internal/history"
+	"skydrop/daemon/internal/hotspot"
 	"skydrop/daemon/internal/presence"
 	"skydrop/daemon/internal/security"
 	"skydrop/daemon/internal/storage"
@@ -37,6 +38,7 @@ type Server struct {
 	webCtrl         *web.WebController
 	clipboardMgr    *clipboard.Manager
 	clipboardWatcher *clipboard.Watcher
+	hotspotMgr      *hotspot.Manager
 }
 
 // NewServer initializes the server with storage, pairing manager, routes, and security configurations.
@@ -52,6 +54,7 @@ func NewServer(cfg *config.Config, store *storage.Storage, pm *security.PairMana
 	resolver := discovery.NewPeerResolver()
 	resolver.SetSelf(cfg.DeviceName, cfg.Port, "")
 	uploader := client.NewUploader(true)
+	uploader.SetLocalDeviceID(cfg.DeviceName)
 	notifier := ui.NewNotifier()
 	histMgr, _ := history.NewManager(cfg.HistoryFile, 500)
 	presenceSvc := presence.NewService(pm, resolver, cfg.DeviceName, cfg.DeviceName)
@@ -66,6 +69,9 @@ func NewServer(cfg *config.Config, store *storage.Storage, pm *security.PairMana
 		})
 	}
 
+	hotspotMgr := hotspot.NewManager(nil)
+	hotspotMgr.CleanupLeftovers(context.Background())
+
 	s := &Server{
 		cfg:              cfg,
 		storage:          store,
@@ -77,6 +83,7 @@ func NewServer(cfg *config.Config, store *storage.Storage, pm *security.PairMana
 		presenceService:  presenceSvc,
 		clipboardMgr:     clipMgr,
 		clipboardWatcher: clipWatcher,
+		hotspotMgr:       hotspotMgr,
 	}
 
 	mux := http.NewServeMux()
@@ -88,6 +95,15 @@ func NewServer(cfg *config.Config, store *storage.Storage, pm *security.PairMana
 	mux.HandleFunc("/pair/start", s.handlePairStart)
 	mux.HandleFunc("/pair/confirm", s.handlePairConfirm)
 	mux.HandleFunc("/pair/peers", s.handleListPeers)
+	mux.HandleFunc("/pair/request", s.handlePairRequest)
+	mux.HandleFunc("/pair/request/status", s.handlePairRequestStatus)
+	mux.HandleFunc("/pair/request/cancel", s.handlePairRequestCancel)
+
+	// Pairing API routes for local Electron UI
+	mux.HandleFunc("/api/pair/incoming", s.handleIncomingPairRequests)
+	mux.HandleFunc("/api/pair/incoming/accept", s.handleIncomingPairAccept)
+	mux.HandleFunc("/api/pair/incoming/decline", s.handleIncomingPairDecline)
+	mux.HandleFunc("/api/pair/initiate", s.handlePairInitiate)
 
 	// Clipboard routes (authenticated for network peers)
 	mux.HandleFunc("/clipboard/add", s.requireAuth(s.handleClipboardAdd))
@@ -109,12 +125,24 @@ func NewServer(cfg *config.Config, store *storage.Storage, pm *security.PairMana
 	mux.HandleFunc("/api/clipboard/push", s.handleClipboardPush)
 	mux.HandleFunc("/api/clipboard/settings", s.handleClipboardSettings)
 
+	// Hotspot API routes for local Electron UI
+	mux.HandleFunc("/api/hotspot/capabilities", s.handleHotspotCapabilities)
+	mux.HandleFunc("/api/hotspot/start", s.handleHotspotStart)
+	mux.HandleFunc("/api/hotspot/stop", s.handleHotspotStop)
+	mux.HandleFunc("/api/hotspot/status", s.handleHotspotStatus)
+
 	// Register web UI dashboard and client API
 	webCtrl := web.NewWebController(cfg, pm, resolver, uploader, notifier, histMgr)
 	webCtrl.SetStorage(store)
 	webCtrl.SetPresenceService(presenceSvc)
 	webCtrl.RegisterRoutes(mux)
 	s.webCtrl = webCtrl
+
+	pm.OnPairRequest(func(req *security.PairRequest) {
+		if webCtrl != nil {
+			webCtrl.BroadcastPairRequest(req)
+		}
+	})
 
 	s.httpServer = &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
@@ -182,6 +210,9 @@ func (s *Server) Start() error {
 
 // Shutdown gracefully stops the server.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.hotspotMgr != nil {
+		_ = s.hotspotMgr.StopHotspot(ctx)
+	}
 	if s.clipboardWatcher != nil {
 		s.clipboardWatcher.Stop()
 	}

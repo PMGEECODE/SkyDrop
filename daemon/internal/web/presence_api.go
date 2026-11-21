@@ -39,6 +39,29 @@ func (wc *WebController) BroadcastPairSuccess(peer *security.PairedPeer) {
 	}
 }
 
+// BroadcastPairRequest sends a real-time pair_request event to all connected SSE clients.
+func (wc *WebController) BroadcastPairRequest(req *security.PairRequest) {
+	wc.sseClientsMu.Lock()
+	msg, _ := json.Marshal(map[string]interface{}{
+		"type":        "pair_request",
+		"request_id":  req.ID,
+		"device_id":   req.DeviceID,
+		"device_name": req.DeviceName,
+		"device_type": req.DeviceType,
+		"host":        req.Host,
+		"port":        req.Port,
+		"is_tls":      req.IsTLS,
+		"expires_at":  req.ExpiresAt.Format(time.RFC3339),
+	})
+	for ch := range wc.sseClients {
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+	wc.sseClientsMu.Unlock()
+}
+
 // BroadcastReceiveProgress sends a real-time receive_progress event to all connected SSE clients.
 func (wc *WebController) BroadcastReceiveProgress(filename string, bytesReceived, totalBytes int64, percent int, status string) {
 	wc.sseClientsMu.Lock()

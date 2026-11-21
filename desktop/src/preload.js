@@ -14,6 +14,11 @@ contextBridge.exposeInMainWorld('skydrop', {
   getPairSession: () => ipcRenderer.invoke('get-pair-session'),
   getPairStatus: () => ipcRenderer.invoke('get-pair-status'),
   unpairPeer: (id) => ipcRenderer.invoke('unpair-peer', id),
+  pairInitiate: (target) => ipcRenderer.invoke('pair-initiate', target),
+  pairGetIncoming: () => ipcRenderer.invoke('pair-get-incoming'),
+  pairAcceptIncoming: (reqId) => ipcRenderer.invoke('pair-accept-incoming', reqId),
+  pairDeclineIncoming: (reqId) => ipcRenderer.invoke('pair-decline-incoming', reqId),
+  pairConfirmSecret: (payload) => ipcRenderer.invoke('pair-confirm-secret', payload),
   getHistory: () => ipcRenderer.invoke('get-history'),
   clearHistory: () => ipcRenderer.invoke('clear-history'),
   deleteHistoryEntry: (id) => ipcRenderer.invoke('delete-history-entry', id),
@@ -82,5 +87,11 @@ contextBridge.exposeInMainWorld('skydrop', {
     const sub = (_, data) => callback(data);
     ipcRenderer.on('clipboard-update', sub);
     return () => ipcRenderer.removeListener('clipboard-update', sub);
-  }
+  },
+
+  // ── Hotspot ────────────────────────────────────────────────────────────────
+  hotspotGetCapabilities: () => ipcRenderer.invoke('hotspot-get-capabilities'),
+  hotspotStart: (opts) => ipcRenderer.invoke('hotspot-start', opts),
+  hotspotStop: () => ipcRenderer.invoke('hotspot-stop'),
+  hotspotGetStatus: () => ipcRenderer.invoke('hotspot-get-status')
 });

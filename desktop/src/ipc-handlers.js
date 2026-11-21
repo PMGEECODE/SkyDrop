@@ -244,6 +244,26 @@ function registerIpcHandlers(mainWindow, daemonManager, thumbnailManager, autost
     return requestDaemon(`${getBase()}/api/pair/unpair`, 'POST', { id });
   });
 
+  ipcMain.handle('pair-initiate', async (_event, target) => {
+    return requestDaemon(`${getBase()}/api/pair/initiate`, 'POST', target || {});
+  });
+
+  ipcMain.handle('pair-get-incoming', async () => {
+    return requestDaemon(`${getBase()}/api/pair/incoming`);
+  });
+
+  ipcMain.handle('pair-accept-incoming', async (_event, reqId) => {
+    return requestDaemon(`${getBase()}/api/pair/incoming/accept`, 'POST', { request_id: reqId });
+  });
+
+  ipcMain.handle('pair-decline-incoming', async (_event, reqId) => {
+    return requestDaemon(`${getBase()}/api/pair/incoming/decline`, 'POST', { request_id: reqId });
+  });
+
+  ipcMain.handle('pair-confirm-secret', async (_event, payload) => {
+    return requestDaemon(`${getBase()}/api/pair/confirm`, 'POST', payload || {});
+  });
+
   ipcMain.handle('get-history', async () => {
     return requestDaemon(`${getBase()}/api/history`);
   });
@@ -518,6 +538,24 @@ function registerIpcHandlers(mainWindow, daemonManager, thumbnailManager, autost
       return { ok: false, error: 'Settings must be an object' };
     }
     return requestDaemon(`${getBase()}/clipboard/settings`, 'POST', settings);
+  });
+
+  // ── Hotspot IPC ──────────────────────────────────────────────────────────
+
+  ipcMain.handle('hotspot-get-capabilities', async () => {
+    return requestDaemon(`${getBase()}/api/hotspot/capabilities`);
+  });
+
+  ipcMain.handle('hotspot-start', async (_event, opts) => {
+    return requestDaemon(`${getBase()}/api/hotspot/start`, 'POST', opts || {});
+  });
+
+  ipcMain.handle('hotspot-stop', async () => {
+    return requestDaemon(`${getBase()}/api/hotspot/stop`, 'POST');
+  });
+
+  ipcMain.handle('hotspot-get-status', async () => {
+    return requestDaemon(`${getBase()}/api/hotspot/status`);
   });
 }
 

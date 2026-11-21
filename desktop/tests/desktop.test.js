@@ -570,6 +570,93 @@ async function runTests() {
     console.log('  ✓ Clipboard screen markup, preload bridge, IPC endpoints, and renderer verified');
   }
 
+  // Test 21: Wi-Fi Hotspot controls, IPC handlers & QR bridge validation
+  {
+    console.log('[Test 21] Wi-Fi Hotspot UI controls, IPC handlers & QR bridge validation...');
+    const indexHtml = fs.readFileSync(path.join(__dirname, '../src/ui/index.html'), 'utf8');
+    const preloadJs = fs.readFileSync(path.join(__dirname, '../src/preload.js'), 'utf8');
+    const ipcHandlersJs = fs.readFileSync(path.join(__dirname, '../src/ipc-handlers.js'), 'utf8');
+    const devicesViewJs = fs.readFileSync(path.join(__dirname, '../src/ui/js/devices-view.js'), 'utf8');
+
+    // Markup verification
+    assert(indexHtml.includes('id="hotspot-card"'), 'index.html missing #hotspot-card');
+    assert(indexHtml.includes('id="btn-toggle-hotspot"'), 'index.html missing #btn-toggle-hotspot');
+    assert(indexHtml.includes('id="hotspot-active-panel"'), 'index.html missing #hotspot-active-panel');
+    assert(indexHtml.includes('id="hotspot-qr-img"'), 'index.html missing #hotspot-qr-img');
+    assert(indexHtml.includes('id="hotspot-ssid-text"'), 'index.html missing #hotspot-ssid-text');
+    assert(indexHtml.includes('id="hotspot-password-text"'), 'index.html missing #hotspot-password-text');
+    assert(indexHtml.includes('id="settings-hotspot-timeout"'), 'index.html missing #settings-hotspot-timeout');
+
+    // Preload API verification
+    assert(preloadJs.includes('hotspotGetCapabilities:'), 'preload.js missing hotspotGetCapabilities');
+    assert(preloadJs.includes('hotspotStart:'), 'preload.js missing hotspotStart');
+    assert(preloadJs.includes('hotspotStop:'), 'preload.js missing hotspotStop');
+    assert(preloadJs.includes('hotspotGetStatus:'), 'preload.js missing hotspotGetStatus');
+
+    // IPC handlers verification
+    assert(ipcHandlersJs.includes('ipcMain.handle(\'hotspot-get-capabilities\''), 'ipc-handlers.js missing hotspot-get-capabilities');
+    assert(ipcHandlersJs.includes('ipcMain.handle(\'hotspot-start\''), 'ipc-handlers.js missing hotspot-start');
+    assert(ipcHandlersJs.includes('ipcMain.handle(\'hotspot-stop\''), 'ipc-handlers.js missing hotspot-stop');
+    assert(ipcHandlersJs.includes('ipcMain.handle(\'hotspot-get-status\''), 'ipc-handlers.js missing hotspot-get-status');
+
+    // UI integration verification
+    assert(devicesViewJs.includes('initHotspot'), 'devices-view.js must define initHotspot');
+    assert(devicesViewJs.includes('window.skydrop.hotspotStart'), 'devices-view.js must call hotspotStart');
+    assert(devicesViewJs.includes('window.skydrop.hotspotStop'), 'devices-view.js must call hotspotStop');
+
+    console.log('  ✓ Hotspot markup, IPC routes, QR code display, and lifecycle handlers verified');
+  }
+
+  // Test 22: Pairing Approval & Interactive PIN Workflow Validation
+  {
+    console.log('[Test 22] Pairing Approval & Interactive PIN Workflow Validation...');
+    const indexHtml = fs.readFileSync(path.join(__dirname, '../src/ui/index.html'), 'utf8');
+    const preloadJs = fs.readFileSync(path.join(__dirname, '../src/preload.js'), 'utf8');
+    const ipcHandlersJs = fs.readFileSync(path.join(__dirname, '../src/ipc-handlers.js'), 'utf8');
+    const devicesViewJs = fs.readFileSync(path.join(__dirname, '../src/ui/js/devices-view.js'), 'utf8');
+
+    // 1. Incoming approval dialog markup verification
+    assert(indexHtml.includes('id="modal-pair-incoming"'), 'index.html missing #modal-pair-incoming');
+    assert(indexHtml.includes('id="pair-incoming-title"'), 'index.html missing #pair-incoming-title');
+    assert(indexHtml.includes('id="pair-incoming-message"'), 'index.html missing #pair-incoming-message');
+    assert(indexHtml.includes('id="pair-incoming-meta"'), 'index.html missing #pair-incoming-meta');
+    assert(indexHtml.includes('id="btn-pair-incoming-accept"'), 'index.html missing #btn-pair-incoming-accept');
+    assert(indexHtml.includes('id="btn-pair-incoming-decline"'), 'index.html missing #btn-pair-incoming-decline');
+
+    // 2. Outbound PIN input modal markup verification
+    assert(indexHtml.includes('id="modal-pair-input"'), 'index.html missing #modal-pair-input');
+    assert(indexHtml.includes('id="pair-pin-input-field"'), 'index.html missing #pair-pin-input-field');
+    assert(indexHtml.includes('id="pair-pin-input-error"'), 'index.html missing #pair-pin-input-error');
+    assert(indexHtml.includes('id="btn-pair-input-cancel"'), 'index.html missing #btn-pair-input-cancel');
+    assert(indexHtml.includes('id="btn-pair-input-submit"'), 'index.html missing #btn-pair-input-submit');
+
+    // 3. Preload bridge verification
+    assert(preloadJs.includes('pairInitiate:'), 'preload.js missing pairInitiate');
+    assert(preloadJs.includes('pairGetIncoming:'), 'preload.js missing pairGetIncoming');
+    assert(preloadJs.includes('pairAcceptIncoming:'), 'preload.js missing pairAcceptIncoming');
+    assert(preloadJs.includes('pairDeclineIncoming:'), 'preload.js missing pairDeclineIncoming');
+    assert(preloadJs.includes('pairConfirmSecret:'), 'preload.js missing pairConfirmSecret');
+
+    // 4. IPC handlers verification
+    assert(ipcHandlersJs.includes("ipcMain.handle('pair-initiate'"), 'ipc-handlers.js missing pair-initiate');
+    assert(ipcHandlersJs.includes("ipcMain.handle('pair-get-incoming'"), 'ipc-handlers.js missing pair-get-incoming');
+    assert(ipcHandlersJs.includes("ipcMain.handle('pair-accept-incoming'"), 'ipc-handlers.js missing pair-accept-incoming');
+    assert(ipcHandlersJs.includes("ipcMain.handle('pair-decline-incoming'"), 'ipc-handlers.js missing pair-decline-incoming');
+    assert(ipcHandlersJs.includes("ipcMain.handle('pair-confirm-secret'"), 'ipc-handlers.js missing pair-confirm-secret');
+
+    // 5. DevicesView logic verification
+    assert(devicesViewJs.includes('enqueueIncomingRequest'), 'devices-view.js missing enqueueIncomingRequest');
+    assert(devicesViewJs.includes('showNextIncomingRequest'), 'devices-view.js missing showNextIncomingRequest');
+    assert(devicesViewJs.includes('closeIncomingModal'), 'devices-view.js missing closeIncomingModal');
+    assert(devicesViewJs.includes('startPairingWithDevice'), 'devices-view.js missing startPairingWithDevice');
+    assert(devicesViewJs.includes('openPinInputModal'), 'devices-view.js missing openPinInputModal');
+    assert(devicesViewJs.includes('submitPairPin'), 'devices-view.js missing submitPairPin');
+    assert(devicesViewJs.includes('pairAcceptIncoming'), 'devices-view.js missing pairAcceptIncoming call');
+    assert(devicesViewJs.includes('pairDeclineIncoming'), 'devices-view.js missing pairDeclineIncoming call');
+
+    console.log('  ✓ Pairing approval dialog, PIN modal, preload methods, IPC channels, and view handlers verified');
+  }
+
   console.log('\n✅ All SkyDrop desktop tests passed successfully!');
   process.exit(0);
 }

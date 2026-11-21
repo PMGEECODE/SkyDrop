@@ -280,6 +280,18 @@ class SendView {
     let optionsHtml = '<option value="">Choose target device...</option>';
     let menuHtml = '';
 
+    const onlinePeers = this.peers.filter((p) => p.is_connected);
+    if (onlinePeers.length > 1) {
+      const isAllSelected = currentVal === '__ALL__';
+      optionsHtml += `<option value="__ALL__" ${isAllSelected ? 'selected' : ''}>✨ All Connected Devices (${onlinePeers.length})</option>`;
+      menuHtml += `
+        <div class="custom-select-option ${isAllSelected ? 'selected' : ''}" data-value="__ALL__" data-online="true">
+          <span>✨ All Connected Devices (${onlinePeers.length})</span>
+          <span class="option-badge online">Broadcast</span>
+        </div>
+      `;
+    }
+
     for (const p of this.peers) {
       const isOnline = p.is_connected;
       const isPaired = p.is_paired;
@@ -339,6 +351,11 @@ class SendView {
 
   renderCustomSelectLabel() {
     if (!this.customSelectLabel) return;
+    if (this.targetSelect.value === '__ALL__') {
+      const onlineCount = this.peers.filter((p) => p.is_connected).length;
+      this.customSelectLabel.textContent = `✨ All Connected Devices (${onlineCount})`;
+      return;
+    }
     const selectedPeer = this.peers.find((p) => p.id === this.targetSelect.value);
     if (selectedPeer) {
       this.customSelectLabel.textContent = selectedPeer.name;
@@ -356,9 +373,14 @@ class SendView {
     if (this.isSending) {
       this.sendBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> Sending...';
     } else if (hasFiles && hasTarget) {
-      const target = this.peers.find((p) => p.id === this.targetSelect.value);
-      const name = target ? target.name : 'Device';
-      this.sendBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Drop ${this.queuedFiles.length} File(s) to ${escapeHtml(name)}`;
+      if (this.targetSelect.value === '__ALL__') {
+        const onlineCount = this.peers.filter((p) => p.is_connected).length;
+        this.sendBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Drop ${this.queuedFiles.length} File(s) to All Devices (${onlineCount})`;
+      } else {
+        const target = this.peers.find((p) => p.id === this.targetSelect.value);
+        const name = target ? target.name : 'Device';
+        this.sendBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Drop ${this.queuedFiles.length} File(s) to ${escapeHtml(name)}`;
+      }
     } else {
       this.sendBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Drop Files';
     }
@@ -381,8 +403,15 @@ class SendView {
 
   async sendQueue() {
     if (this.isSending || this.queuedFiles.length === 0) return;
-    const targetPeer = this.peers.find((p) => p.id === this.targetSelect.value);
-    if (!targetPeer) return;
+
+    let targetPeers = [];
+    if (this.targetSelect.value === '__ALL__') {
+      targetPeers = this.peers.filter((p) => p.is_connected);
+    } else {
+      const p = this.peers.find((p) => p.id === this.targetSelect.value);
+      if (p) targetPeers = [p];
+    }
+    if (targetPeers.length === 0) return;
 
     const progressStatsEl = document.getElementById('send-progress-stats');
     const progressEtaEl = document.getElementById('send-progress-eta');
@@ -396,9 +425,6 @@ class SendView {
     this.isSending = true;
     this.updateSendButtonState();
     if (this.progressCard) this.progressCard.classList.add('active');
-
-    const targetUrl = targetPeer.baseUrl || `${targetPeer.is_tls ? 'https' : 'http'}://${targetPeer.host}:${targetPeer.port}`;
-    const authToken = targetPeer.auth_token || '';
 
     const startTime = Date.now();
     const completedCount = this.queuedFiles.length;
@@ -436,43 +462,50 @@ class SendView {
     }
 
     try {
-      for (const file of this.queuedFiles) {
-        if (this.progressFilename) this.progressFilename.textContent = `Sending ${file.name}...`;
-        const res = await window.skydrop.sendFile(file.path, targetUrl, authToken);
-        if (!res.ok) {
-          let friendly = 'Failed to drop file.';
-          let title = 'Transfer Failed';
-          const code = res.statusCode;
-          const cat = res.category;
-          const msg = res.error || '';
+      for (let i = 0; i < targetPeers.length; i++) {
+        const targetPeer = targetPeers[i];
+        const targetUrl = targetPeer.baseUrl || `${targetPeer.is_tls ? 'https' : 'http'}://${targetPeer.host}:${targetPeer.port}`;
+        const authToken = targetPeer.auth_token || '';
+        const devPrefix = targetPeers.length > 1 ? `[${i + 1}/${targetPeers.length} to ${targetPeer.name}] ` : '';
 
-          if (code === 401 || code === 403 || cat === 'auth') {
-            title = 'Not Paired / Unauthorized';
-            friendly = 'Phone refused the file (Not paired or pairing token mismatch). Please pair device again.';
-          } else if (code === 404) {
-            title = 'Endpoint Not Found';
-            friendly = 'Phone receiver service was not found or is inactive.';
-          } else if (code === 413) {
-            title = 'File Too Large';
-            friendly = 'The recipient refused the file because it exceeds permitted storage size.';
-          } else if (cat === 'connection_refused') {
-            title = 'Phone Not Reachable';
-            friendly = 'Connection refused. Ensure the SkyDrop receiver is running on the phone and Wi-Fi is active.';
-          } else if (cat === 'timeout') {
-            title = 'Transfer Timed Out';
-            friendly = 'Connection to the phone timed out. Check network signal or reconnect to Wi-Fi.';
-          } else if (cat === 'tls') {
-            title = 'Security Handshake Error';
-            friendly = 'TLS handshake or certificate verification failed.';
-          } else if (msg) {
-            friendly = msg;
+        for (const file of this.queuedFiles) {
+          if (this.progressFilename) this.progressFilename.textContent = `${devPrefix}Sending ${file.name}...`;
+          const res = await window.skydrop.sendFile(file.path, targetUrl, authToken);
+          if (!res.ok) {
+            let friendly = 'Failed to drop file.';
+            let title = 'Transfer Failed';
+            const code = res.statusCode;
+            const cat = res.category;
+            const msg = res.error || '';
+
+            if (code === 401 || code === 403 || cat === 'auth') {
+              title = 'Not Paired / Unauthorized';
+              friendly = 'Target device refused the file (Not paired or pairing token mismatch). Please pair device again.';
+            } else if (code === 404) {
+              title = 'Endpoint Not Found';
+              friendly = 'Target receiver service was not found or is inactive.';
+            } else if (code === 413) {
+              title = 'File Too Large';
+              friendly = 'The recipient refused the file because it exceeds permitted storage size.';
+            } else if (cat === 'connection_refused') {
+              title = 'Device Not Reachable';
+              friendly = `Connection refused for ${targetPeer.name}. Ensure the SkyDrop receiver is running and connected to Wi-Fi.`;
+            } else if (cat === 'timeout') {
+              title = 'Transfer Timed Out';
+              friendly = `Connection to ${targetPeer.name} timed out. Check network signal or reconnect to Wi-Fi.`;
+            } else if (cat === 'tls') {
+              title = 'Security Handshake Error';
+              friendly = 'TLS handshake or certificate verification failed.';
+            } else if (msg) {
+              friendly = msg;
+            }
+
+            const rawDetails = `Status Code: ${res.statusCode || 'N/A'}\nCategory: ${res.category || 'unknown'}\nTarget: ${res.targetUrl || targetUrl}\nError: ${res.error || 'Unknown error'}\n\nTechnical Details:\n${res.details || res.error || 'No further details'}`;
+            console.error('[SkyDrop Send Error]', rawDetails);
+            this.showError(title, friendly, rawDetails);
+            if (this.progressFilename) this.progressFilename.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--color-danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> ${title}`;
+            return;
           }
-
-          const rawDetails = `Status Code: ${res.statusCode || 'N/A'}\nCategory: ${res.category || 'unknown'}\nTarget: ${res.targetUrl || targetUrl}\nError: ${res.error || 'Unknown error'}\n\nTechnical Details:\n${res.details || res.error || 'No further details'}`;
-          console.error('[SkyDrop Send Error]', rawDetails);
-          this.showError(title, friendly, rawDetails);
-          if (this.progressFilename) this.progressFilename.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--color-danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> ${title}`;
-          return;
         }
       }
 
@@ -484,7 +517,8 @@ class SendView {
 
       if (successCard) {
         if (successSub) {
-          successSub.textContent = `✓ ${completedCount} file${completedCount === 1 ? '' : 's'} sent to ${escapeHtml(targetPeer.name)}`;
+          const targetName = targetPeers.length > 1 ? `all ${targetPeers.length} devices` : escapeHtml(targetPeers[0].name);
+          successSub.textContent = `✓ ${completedCount} file${completedCount === 1 ? '' : 's'} sent to ${targetName}`;
         }
         successCard.style.display = 'flex';
 

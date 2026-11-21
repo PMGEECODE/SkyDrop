@@ -17,6 +17,27 @@ class DevicesView {
     this.pairModalContent = document.getElementById('pair-modal-content');
     this.pairModalSuccess = document.getElementById('pair-modal-success');
     this.pairSuccessDevice = document.getElementById('pair-success-device');
+
+    // Incoming pairing request modal elements
+    this.incomingModal = document.getElementById('modal-pair-incoming');
+    this.incomingTitle = document.getElementById('pair-incoming-title');
+    this.incomingMessage = document.getElementById('pair-incoming-message');
+    this.incomingMeta = document.getElementById('pair-incoming-meta');
+    this.incomingIcon = document.getElementById('pair-incoming-icon');
+    this.btnIncomingAccept = document.getElementById('btn-pair-incoming-accept');
+    this.btnIncomingDecline = document.getElementById('btn-pair-incoming-decline');
+
+    // Outbound PIN input modal elements
+    this.pinInputModal = document.getElementById('modal-pair-input');
+    this.pinInputTitle = document.getElementById('pair-input-title');
+    this.pinInputField = document.getElementById('pair-pin-input-field');
+    this.pinInputError = document.getElementById('pair-pin-input-error');
+    this.btnPinCancel = document.getElementById('btn-pair-input-cancel');
+    this.btnPinSubmit = document.getElementById('btn-pair-input-submit');
+
+    this.incomingQueue = [];
+    this.activeIncomingReq = null;
+    this.activeOutboundTarget = null;
     this.pairPollTimer = null;
     this.currentPairingUri = '';
     this.lastPeerStates = new Map(); // peerId -> presenceState string
@@ -24,6 +45,10 @@ class DevicesView {
 
     this.initEvents();
     this.initPresenceListener();
+    this.initHotspot();
+
+    this.checkIncomingPairRequests();
+    this.incomingPollTimer = setInterval(() => this.checkIncomingPairRequests(), 3000);
   }
 
   initEvents() {
@@ -145,12 +170,81 @@ class DevicesView {
         });
       }
     }
+
+    // Incoming Pairing Approval Modal Events
+    if (this.btnIncomingAccept) {
+      this.btnIncomingAccept.addEventListener('click', async () => {
+        if (!this.activeIncomingReq) return;
+        const req = this.activeIncomingReq;
+        this.btnIncomingAccept.disabled = true;
+        this.btnIncomingAccept.textContent = 'Accepting...';
+        try {
+          await window.skydrop.pairAcceptIncoming(req.id || req.request_id);
+          this.closeIncomingModal();
+          this.openPairModal();
+        } catch (err) {
+          alert('Failed to accept pairing request: ' + err.message);
+        } finally {
+          this.btnIncomingAccept.disabled = false;
+          this.btnIncomingAccept.textContent = 'Accept';
+        }
+      });
+    }
+
+    if (this.btnIncomingDecline) {
+      this.btnIncomingDecline.addEventListener('click', async () => {
+        if (!this.activeIncomingReq) return;
+        const req = this.activeIncomingReq;
+        try {
+          await window.skydrop.pairDeclineIncoming(req.id || req.request_id);
+        } catch (_) {}
+        this.closeIncomingModal();
+      });
+    }
+
+    if (this.incomingModal) {
+      this.incomingModal.addEventListener('click', (e) => {
+        if (e.target === this.incomingModal) {
+          if (this.activeIncomingReq) {
+            window.skydrop.pairDeclineIncoming(this.activeIncomingReq.id || this.activeIncomingReq.request_id).catch(() => {});
+          }
+          this.closeIncomingModal();
+        }
+      });
+    }
+
+    // Outbound PIN Input Modal Events
+    if (this.btnPinSubmit) {
+      this.btnPinSubmit.addEventListener('click', () => this.submitPairPin());
+    }
+    if (this.pinInputField) {
+      this.pinInputField.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') this.submitPairPin();
+      });
+      this.pinInputField.addEventListener('input', (e) => {
+        e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+      });
+    }
+    if (this.btnPinCancel) {
+      this.btnPinCancel.addEventListener('click', () => this.closePinInputModal());
+    }
+    if (this.pinInputModal) {
+      this.pinInputModal.addEventListener('click', (e) => {
+        if (e.target === this.pinInputModal) this.closePinInputModal();
+      });
+    }
   }
 
   initPresenceListener() {
     if (window.skydrop && typeof window.skydrop.onPresenceUpdate === 'function') {
       window.skydrop.onPresenceUpdate((eventData) => {
         if (!eventData) return;
+        if (eventData.type === 'pair_request') {
+          if (eventData.request) {
+            this.enqueueIncomingRequest(eventData.request);
+          }
+          return;
+        }
         if (eventData.type === 'pair_success') {
           this.handlePairSuccess(eventData.device_name || 'Device');
           return;
@@ -167,6 +261,200 @@ class DevicesView {
           this.render(this.lastPeersData);
         }
       });
+    }
+  }
+
+  enqueueIncomingRequest(req) {
+    if (!req || !req.id) return;
+    if (this.activeIncomingReq && this.activeIncomingReq.id === req.id) return;
+    if (this.incomingQueue.some((r) => r.id === req.id)) return;
+    this.incomingQueue.push(req);
+    if (!this.activeIncomingReq) {
+      this.showNextIncomingRequest();
+    }
+  }
+
+  showNextIncomingRequest() {
+    if (this.incomingQueue.length === 0) {
+      this.activeIncomingReq = null;
+      if (this.incomingModal) this.incomingModal.classList.remove('active');
+      return;
+    }
+    this.activeIncomingReq = this.incomingQueue.shift();
+    const req = this.activeIncomingReq;
+    if (this.incomingMessage) {
+      this.incomingMessage.textContent = `${req.device_name || 'Nearby Device'} wants to pair with this device.`;
+    }
+    if (this.incomingMeta) {
+      const hostStr = req.host ? `${req.host}:${req.port || 8444}` : '';
+      const typeStr = req.device_type ? `[${req.device_type}]` : '';
+      this.incomingMeta.textContent = [typeStr, hostStr].filter(Boolean).join(' • ');
+    }
+    if (this.incomingIcon) {
+      const dt = (req.device_type || '').toLowerCase();
+      const dn = (req.device_name || '').toLowerCase();
+      if (dt.includes('tv') || dn.includes('tv')) {
+        this.incomingIcon.textContent = '📺';
+      } else if (dt.includes('android') || dt.includes('phone') || dn.includes('phone')) {
+        this.incomingIcon.textContent = '📱';
+      } else {
+        this.incomingIcon.textContent = '💻';
+      }
+    }
+    if (this.incomingModal) {
+      this.incomingModal.classList.add('active');
+    }
+  }
+
+  closeIncomingModal() {
+    if (this.incomingModal) {
+      this.incomingModal.classList.remove('active');
+    }
+    this.activeIncomingReq = null;
+    setTimeout(() => this.showNextIncomingRequest(), 300);
+  }
+
+  async checkIncomingPairRequests() {
+    if (!window.skydrop || typeof window.skydrop.pairGetIncoming !== 'function') return;
+    try {
+      const res = await window.skydrop.pairGetIncoming();
+      if (res && res.ok && Array.isArray(res.data)) {
+        for (const req of res.data) {
+          this.enqueueIncomingRequest(req);
+        }
+      }
+    } catch (_) {}
+  }
+
+  async startPairingWithDevice(peerId) {
+    const peers = (this.lastPeersData && this.lastPeersData.peers) || [];
+    const p = peers.find((item) => item.id === peerId);
+    if (!p) {
+      this.openPairModal();
+      return;
+    }
+
+    const targetHost = p.host;
+    const targetPort = p.port || (p.is_tls ? 8443 : 8444);
+    const isTls = Boolean(p.is_tls);
+    const deviceName = p.name || 'Remote Device';
+
+    const btn = document.querySelector(`[data-peer-pair-btn="${p.id}"]`);
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Requesting...';
+    }
+
+    try {
+      const res = await window.skydrop.pairInitiate({
+        host: targetHost,
+        port: targetPort,
+        is_tls: isTls,
+        device_name: deviceName
+      });
+
+      if (res && res.ok && res.data) {
+        if (res.data.status === 'accepted') {
+          this.openPinInputModal({
+            host: targetHost,
+            port: targetPort,
+            is_tls: isTls,
+            device_name: deviceName
+          });
+          return;
+        } else if (res.data.status === 'declined') {
+          alert(`Pairing request was declined by ${deviceName}.`);
+          return;
+        }
+      }
+      const errMsg = (res && res.error) || 'Pairing request timed out or was not accepted.';
+      alert(errMsg);
+    } catch (err) {
+      alert('Failed to initiate pairing: ' + err.message);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Pair';
+      }
+    }
+  }
+
+  openPinInputModal(target) {
+    this.activeOutboundTarget = target;
+    if (this.pinInputField) {
+      this.pinInputField.value = '';
+    }
+    if (this.pinInputError) {
+      this.pinInputError.style.display = 'none';
+      this.pinInputError.textContent = '';
+    }
+    if (this.pinInputTitle && target && target.device_name) {
+      this.pinInputTitle.textContent = `Pair with ${target.device_name}`;
+    }
+    if (this.pinInputModal) {
+      this.pinInputModal.classList.add('active');
+      if (this.pinInputField) {
+        setTimeout(() => this.pinInputField.focus(), 100);
+      }
+    }
+  }
+
+  closePinInputModal() {
+    if (this.pinInputModal) {
+      this.pinInputModal.classList.remove('active');
+    }
+    this.activeOutboundTarget = null;
+  }
+
+  async submitPairPin() {
+    if (!this.activeOutboundTarget) return;
+    const pin = this.pinInputField ? this.pinInputField.value.trim() : '';
+    if (!pin || pin.length !== 6) {
+      if (this.pinInputError) {
+        this.pinInputError.textContent = 'Please enter a 6-digit PIN';
+        this.pinInputError.style.display = 'block';
+      }
+      return;
+    }
+    if (this.btnPinSubmit) {
+      this.btnPinSubmit.disabled = true;
+      this.btnPinSubmit.textContent = 'Verifying...';
+    }
+    if (this.pinInputError) {
+      this.pinInputError.style.display = 'none';
+    }
+
+    try {
+      const res = await window.skydrop.pairConfirmSecret({
+        host: this.activeOutboundTarget.host,
+        port: this.activeOutboundTarget.port,
+        is_tls: this.activeOutboundTarget.is_tls,
+        secret: pin,
+        device_name: this.activeOutboundTarget.device_name
+      });
+
+      if (res && res.ok) {
+        const pairedName = (res.data && res.data.device_name) || this.activeOutboundTarget.device_name;
+        this.closePinInputModal();
+        this.handlePairSuccess(pairedName);
+        if (this.app) this.app.refreshPeers();
+      } else {
+        const errMsg = (res && res.error) || 'Invalid pairing PIN. Please try again.';
+        if (this.pinInputError) {
+          this.pinInputError.textContent = errMsg;
+          this.pinInputError.style.display = 'block';
+        }
+      }
+    } catch (err) {
+      if (this.pinInputError) {
+        this.pinInputError.textContent = err.message || 'Connection error';
+        this.pinInputError.style.display = 'block';
+      }
+    } finally {
+      if (this.btnPinSubmit) {
+        this.btnPinSubmit.disabled = false;
+        this.btnPinSubmit.textContent = 'Pair';
+      }
     }
   }
 
@@ -406,7 +694,7 @@ class DevicesView {
               </div>
             </div>
             <div class="device-actions">
-              <button class="btn-tiny" onclick="window.devicesView.openPairModal()">Pair</button>
+              <button class="btn-tiny" data-peer-pair-btn="${p.id}" onclick="window.devicesView.startPairingWithDevice('${p.id}')">Pair</button>
             </div>
           </div>
         `;
@@ -558,6 +846,223 @@ class DevicesView {
         dot.className = 'health-dot';
         label.textContent = 'System Operational';
         label.style.color = 'var(--color-success)';
+      }
+    }
+  }
+
+  // ─── Hotspot UI & Lifecycle ────────────────────────────────────────────────
+
+  initHotspot() {
+    this.hotspotCard = document.getElementById('hotspot-card');
+    this.btnToggleHotspot = document.getElementById('btn-toggle-hotspot');
+    this.hotspotBadge = document.getElementById('hotspot-badge');
+    this.hotspotSubtext = document.getElementById('hotspot-subtext');
+    this.hotspotIcon = document.getElementById('hotspot-status-icon');
+    this.hotspotActivePanel = document.getElementById('hotspot-active-panel');
+    this.hotspotQrImg = document.getElementById('hotspot-qr-img');
+    this.hotspotSsid = document.getElementById('hotspot-ssid-text');
+    this.hotspotPassword = document.getElementById('hotspot-password-text');
+    this.hotspotIp = document.getElementById('hotspot-ip-text');
+    this.hotspotClients = document.getElementById('hotspot-clients-text');
+    this.hotspotErrorBox = document.getElementById('hotspot-error-box');
+    this.hotspotErrorText = document.getElementById('hotspot-error-text');
+    this.btnHotspotDisconnect = document.getElementById('btn-hotspot-disconnect-confirm');
+    this.btnRevealPassword = document.getElementById('btn-reveal-hotspot-password');
+    this.btnCopyPassword = document.getElementById('btn-copy-hotspot-password');
+    this.btnCopySsid = document.getElementById('btn-copy-hotspot-ssid');
+
+    this.hotspotPollTimer = null;
+    this.rawHotspotPassword = '';
+    this.passwordRevealed = false;
+
+    if (!this.btnToggleHotspot) return;
+
+    this.refreshHotspotStatus();
+
+    this.btnToggleHotspot.addEventListener('click', () => this.handleHotspotToggle());
+
+    if (this.btnHotspotDisconnect) {
+      this.btnHotspotDisconnect.addEventListener('click', () => {
+        this.startHotspot(true);
+      });
+    }
+
+    if (this.btnRevealPassword) {
+      this.btnRevealPassword.addEventListener('click', () => {
+        this.passwordRevealed = !this.passwordRevealed;
+        if (this.passwordRevealed) {
+          this.hotspotPassword.textContent = this.rawHotspotPassword;
+          this.btnRevealPassword.textContent = '🔒';
+        } else {
+          this.hotspotPassword.textContent = '••••••••••••';
+          this.btnRevealPassword.textContent = '👁';
+        }
+      });
+    }
+
+    if (this.btnCopyPassword) {
+      this.btnCopyPassword.addEventListener('click', () => {
+        if (this.rawHotspotPassword) {
+          navigator.clipboard.writeText(this.rawHotspotPassword);
+          const orig = this.btnCopyPassword.textContent;
+          this.btnCopyPassword.textContent = '✓';
+          setTimeout(() => (this.btnCopyPassword.textContent = orig), 1500);
+        }
+      });
+    }
+
+    if (this.btnCopySsid) {
+      this.btnCopySsid.addEventListener('click', () => {
+        const ssid = this.hotspotSsid ? this.hotspotSsid.textContent : '';
+        if (ssid) {
+          navigator.clipboard.writeText(ssid);
+          const orig = this.btnCopySsid.textContent;
+          this.btnCopySsid.textContent = '✓';
+          setTimeout(() => (this.btnCopySsid.textContent = orig), 1500);
+        }
+      });
+    }
+  }
+
+  async refreshHotspotStatus() {
+    if (!window.skydrop || typeof window.skydrop.hotspotGetStatus !== 'function') return;
+    try {
+      const res = await window.skydrop.hotspotGetStatus();
+      if (res && res.ok && res.data) {
+        this.renderHotspotState(res.data);
+      }
+    } catch (_) {}
+  }
+
+  async handleHotspotToggle() {
+    if (!window.skydrop) return;
+    const isRunning = this.btnToggleHotspot.dataset.active === 'true';
+    if (isRunning) {
+      await this.stopHotspot();
+    } else {
+      await this.startHotspot(false);
+    }
+  }
+
+  async startHotspot(disconnectCurrent) {
+    if (this.hotspotErrorBox) this.hotspotErrorBox.style.display = 'none';
+    if (this.btnHotspotDisconnect) this.btnHotspotDisconnect.style.display = 'none';
+
+    this.btnToggleHotspot.disabled = true;
+    this.btnToggleHotspot.textContent = 'Starting...';
+
+    const timeoutSelect = document.getElementById('settings-hotspot-timeout');
+    const idleTimeout = timeoutSelect ? parseInt(timeoutSelect.value, 10) || 10 : 10;
+
+    try {
+      const res = await window.skydrop.hotspotStart({
+        disconnect_current: Boolean(disconnectCurrent),
+        idle_timeout_minutes: idleTimeout
+      });
+
+      if (res && res.ok && res.data) {
+        this.renderHotspotState(res.data);
+      } else if (res && res.error === 'needs_disconnect') {
+        this.showHotspotError(res.message || 'Your Wi-Fi adapter is currently connected. Disconnect to create hotspot?', true);
+        this.renderHotspotState({ active: false });
+      } else {
+        const errMsg = (res && res.message) || (res && res.error) || 'Failed to start Wi-Fi hotspot';
+        this.showHotspotError(errMsg, false);
+        this.renderHotspotState({ active: false });
+      }
+    } catch (err) {
+      this.showHotspotError(err.message || 'Error communicating with hotspot daemon', false);
+      this.renderHotspotState({ active: false });
+    } finally {
+      this.btnToggleHotspot.disabled = false;
+    }
+  }
+
+  async stopHotspot() {
+    this.btnToggleHotspot.disabled = true;
+    this.btnToggleHotspot.textContent = 'Stopping...';
+    try {
+      await window.skydrop.hotspotStop();
+      this.renderHotspotState({ active: false });
+    } catch (err) {
+      this.showHotspotError('Failed to stop hotspot: ' + err.message, false);
+    } finally {
+      this.btnToggleHotspot.disabled = false;
+    }
+  }
+
+  showHotspotError(msg, showDisconnectBtn) {
+    if (this.hotspotErrorBox && this.hotspotErrorText) {
+      this.hotspotErrorText.textContent = msg;
+      this.hotspotErrorBox.style.display = 'block';
+      if (this.btnHotspotDisconnect) {
+        this.btnHotspotDisconnect.style.display = showDisconnectBtn ? 'inline-block' : 'none';
+      }
+    }
+  }
+
+  renderHotspotState(status) {
+    if (!this.btnToggleHotspot) return;
+
+    if (status && status.active) {
+      this.btnToggleHotspot.dataset.active = 'true';
+      this.btnToggleHotspot.textContent = 'Stop Hotspot';
+      this.btnToggleHotspot.className = 'btn-danger';
+      this.hotspotBadge.textContent = 'Active';
+      this.hotspotBadge.className = 'badge badge-active';
+      this.hotspotIcon.classList.add('active');
+      this.hotspotSubtext.textContent = `Broadcasting on ${status.interface || 'Wi-Fi'}`;
+
+      if (this.hotspotActivePanel) this.hotspotActivePanel.style.display = 'block';
+      if (this.hotspotQrImg && status.qr_code) this.hotspotQrImg.src = status.qr_code;
+      if (this.hotspotSsid) this.hotspotSsid.textContent = status.ssid || '';
+
+      this.rawHotspotPassword = status.password || '';
+      if (this.hotspotPassword) {
+        this.hotspotPassword.textContent = this.passwordRevealed ? this.rawHotspotPassword : '••••••••••••';
+      }
+      if (this.hotspotIp) this.hotspotIp.textContent = status.ip || '10.42.0.1';
+
+      const clients = status.connected_clients || [];
+      if (this.hotspotClients) {
+        if (clients.length === 0) {
+          this.hotspotClients.textContent = '0 devices connected';
+        } else {
+          const ips = clients.map(c => c.ip || c.mac).filter(Boolean).join(', ');
+          this.hotspotClients.textContent = `${clients.length} device(s) connected: ${ips}`;
+        }
+      }
+
+      // Start polling
+      if (!this.hotspotPollTimer) {
+        this.hotspotPollTimer = setInterval(async () => {
+          try {
+            const res = await window.skydrop.hotspotGetStatus();
+            if (res && res.ok && res.data) {
+              const prevCount = (status.connected_clients || []).length;
+              const newCount = (res.data.connected_clients || []).length;
+              this.renderHotspotState(res.data);
+              if (newCount !== prevCount) {
+                this.app.pollPeers();
+              }
+            }
+          } catch (_) {}
+        }, 3000);
+      }
+    } else {
+      this.btnToggleHotspot.dataset.active = 'false';
+      this.btnToggleHotspot.textContent = 'Create Hotspot';
+      this.btnToggleHotspot.className = 'btn-primary';
+      this.hotspotBadge.textContent = 'Offline';
+      this.hotspotBadge.className = 'badge badge-inactive';
+      this.hotspotIcon.classList.remove('active');
+      this.hotspotSubtext.textContent = 'Host a direct Wi-Fi network for offline peer transfers';
+
+      if (this.hotspotActivePanel) this.hotspotActivePanel.style.display = 'none';
+
+      if (this.hotspotPollTimer) {
+        clearInterval(this.hotspotPollTimer);
+        this.hotspotPollTimer = null;
       }
     }
   }

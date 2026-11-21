@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -16,12 +17,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/skip2/go-qrcode"
 
 	"skydrop/daemon/internal/history"
 	"skydrop/daemon/internal/presence"
+	"skydrop/daemon/internal/security"
 	"skydrop/daemon/internal/storage"
 )
 
@@ -103,6 +106,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only GET is supported on /health")
 		return
+	}
+
+	if peerID := r.Header.Get("X-SkyDrop-Device-ID"); peerID != "" && s.presenceService != nil {
+		s.presenceService.RecordActivity(peerID)
 	}
 
 	state := "idle"
@@ -379,11 +386,16 @@ type PairStartResponse struct {
 	ExpiresAt   string `json:"expires_at"`
 }
 
-// PairConfirmRequest is submitted by the scanning phone.
+// PairConfirmRequest is submitted by the scanning phone or pairing initiator.
 type PairConfirmRequest struct {
 	DeviceName  string `json:"device_name"`
 	Fingerprint string `json:"fingerprint"`
 	Secret      string `json:"secret"`
+	Host        string `json:"host,omitempty"`
+	Port        int    `json:"port,omitempty"`
+	IsTLS       bool   `json:"is_tls,omitempty"`
+	DeviceType  string `json:"device_type,omitempty"`
+	DeviceID    string `json:"device_id,omitempty"`
 }
 
 // PairConfirmResponse completes mutual pairing.
@@ -485,10 +497,34 @@ func (s *Server) handlePairConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	peer, err := s.pairManager.ConfirmPairing(req.DeviceName, req.Fingerprint, req.Secret)
+	remoteHost := req.Host
+	remotePort := req.Port
+	if remoteHost == "" {
+		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			remoteHost = host
+		}
+	}
+	if remotePort <= 0 {
+		remotePort = 8443
+	}
+
+	peer, err := s.pairManager.ConfirmPairingWithEndpoint(
+		req.DeviceName,
+		req.Fingerprint,
+		req.Secret,
+		remoteHost,
+		remotePort,
+		req.IsTLS,
+		req.DeviceType,
+		req.DeviceID,
+	)
 	if err != nil {
 		writeError(w, http.StatusForbidden, "pairing_failed", err.Error())
 		return
+	}
+
+	if s.presenceService != nil {
+		s.presenceService.RecordActivity(peer.ID)
 	}
 
 	writeJSON(w, http.StatusOK, PairConfirmResponse{
@@ -497,6 +533,334 @@ func (s *Server) handlePairConfirm(w http.ResponseWriter, r *http.Request) {
 		DeviceID:    peer.ID,
 		DeviceName:  s.cfg.DeviceName,
 		Fingerprint: s.fingerprint,
+	})
+}
+
+// handlePairRequest accepts incoming pairing initiation requests and registers them for user approval.
+func (s *Server) handlePairRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only POST is supported on /pair/request")
+		return
+	}
+
+	var req security.PairRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse pair request JSON")
+		return
+	}
+
+	if req.DeviceName == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "device_name is required")
+		return
+	}
+
+	if (req.Fingerprint != "" && req.Fingerprint == s.fingerprint) || (req.DeviceName == s.cfg.DeviceName) {
+		writeError(w, http.StatusBadRequest, "cannot_pair_self", "A device cannot pair with itself")
+		return
+	}
+
+	// Resolve remote host if not specified
+	if req.Host == "" {
+		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			req.Host = host
+		}
+	}
+	if req.Port <= 0 {
+		req.Port = 8443
+	}
+
+	createdReq, err := s.pairManager.AddIncomingRequest(req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "request_error", err.Error())
+		return
+	}
+
+	if s.notifier != nil {
+		_ = s.notifier.NotifyTextReceived("Pairing Request", fmt.Sprintf("%s wants to pair with this device", createdReq.DeviceName))
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":     createdReq.Status,
+		"request_id": createdReq.ID,
+		"expires_at": createdReq.ExpiresAt.Format(time.RFC3339),
+	})
+}
+
+// handlePairRequestStatus checks the current status of an incoming or outgoing pairing request.
+func (s *Server) handlePairRequestStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only GET is supported on /pair/request/status")
+		return
+	}
+
+	reqID := r.URL.Query().Get("request_id")
+	if reqID == "" {
+		writeError(w, http.StatusBadRequest, "missing_request_id", "request_id query parameter required")
+		return
+	}
+
+	req, exists := s.pairManager.GetIncomingRequest(reqID)
+	if !exists {
+		writeError(w, http.StatusNotFound, "not_found", "Pairing request not found or expired")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"request_id":  req.ID,
+		"status":      req.Status,
+		"device_name": s.cfg.DeviceName,
+		"fingerprint": s.fingerprint,
+	})
+}
+
+// handlePairRequestCancel terminates an active pairing request.
+func (s *Server) handlePairRequestCancel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only POST is supported on /pair/request/cancel")
+		return
+	}
+
+	var body struct {
+		RequestID string `json:"request_id"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body.RequestID == "" {
+		body.RequestID = r.URL.Query().Get("request_id")
+	}
+
+	if body.RequestID == "" {
+		writeError(w, http.StatusBadRequest, "missing_request_id", "request_id required")
+		return
+	}
+
+	cancelled, err := s.pairManager.CancelIncomingRequest(body.RequestID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":     cancelled.Status,
+		"request_id": cancelled.ID,
+	})
+}
+
+// handleIncomingPairRequests lists pending pairing requests for the local UI.
+func (s *Server) handleIncomingPairRequests(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only GET is supported")
+		return
+	}
+	requests := s.pairManager.ListIncomingRequests()
+	writeJSON(w, http.StatusOK, requests)
+}
+
+// handleIncomingPairAccept approves a pending request and issues credentials for display.
+func (s *Server) handleIncomingPairAccept(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only POST is supported")
+		return
+	}
+	var body struct {
+		RequestID string `json:"request_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.RequestID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "request_id required")
+		return
+	}
+
+	req, session, err := s.pairManager.AcceptIncomingRequest(body.RequestID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "accept_failed", err.Error())
+		return
+	}
+
+	hostIP := resolveHostIP(r)
+	pairingURI := fmt.Sprintf("skydrop://pair?device=%s&host=%s&port=%d&secret=%s&fingerprint=%s",
+		url.QueryEscape(s.cfg.DeviceName), hostIP, s.cfg.Port, session.Secret, url.QueryEscape(s.fingerprint))
+
+	var qrBase64 string
+	if qrPNG, err := qrcode.Encode(pairingURI, qrcode.Medium, 256); err == nil {
+		qrBase64 = "data:image/png;base64," + base64.StdEncoding.EncodeToString(qrPNG)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":      "accepted",
+		"request_id":  req.ID,
+		"device_name": req.DeviceName,
+		"secret":      session.Secret,
+		"pairing_uri": pairingURI,
+		"qr_code":     qrBase64,
+		"expires_at":  session.ExpiresAt.Format(time.RFC3339),
+	})
+}
+
+// handleIncomingPairDecline rejects a pending pairing request.
+func (s *Server) handleIncomingPairDecline(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only POST is supported")
+		return
+	}
+	var body struct {
+		RequestID string `json:"request_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.RequestID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "request_id required")
+		return
+	}
+
+	declined, err := s.pairManager.DeclineIncomingRequest(body.RequestID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "decline_failed", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":     declined.Status,
+		"request_id": declined.ID,
+	})
+}
+
+// handlePairInitiate initiates pairing with a remote peer, requesting approval and polling status.
+func (s *Server) handlePairInitiate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only POST is supported")
+		return
+	}
+	var body struct {
+		Host       string `json:"host"`
+		Port       int    `json:"port"`
+		IsTLS      bool   `json:"is_tls"`
+		DeviceName string `json:"device_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Host == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "host is required")
+		return
+	}
+	if body.Port <= 0 {
+		body.Port = 8443
+	}
+
+	scheme := "http"
+	if body.IsTLS {
+		scheme = "https"
+	}
+
+	reqPayload := security.PairRequest{
+		DeviceID:    s.cfg.DeviceName,
+		DeviceName:  s.cfg.DeviceName,
+		DeviceType:  "desktop",
+		Host:        resolveHostIP(r),
+		Port:        s.cfg.Port,
+		IsTLS:       s.cfg.EnableTLS,
+		Fingerprint: s.fingerprint,
+	}
+
+	payloadBytes, _ := json.Marshal(reqPayload)
+	targetReqURL := fmt.Sprintf("%s://%s:%d/pair/request", scheme, body.Host, body.Port)
+
+	client := s.uploader.HTTPClient()
+	httpReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, targetReqURL, bytes.NewReader(payloadBytes))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "client_error", err.Error())
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-SkyDrop-Device-ID", s.cfg.DeviceName)
+
+	resp, err := client.Do(httpReq)
+	if err != nil && body.IsTLS {
+		// Fallback to HTTP if HTTPS fails
+		scheme = "http"
+		targetReqURL = fmt.Sprintf("http://%s:%d/pair/request", body.Host, body.Port)
+		if fallbackReq, fbErr := http.NewRequestWithContext(r.Context(), http.MethodPost, targetReqURL, bytes.NewReader(payloadBytes)); fbErr == nil {
+			fallbackReq.Header.Set("Content-Type", "application/json")
+			fallbackReq.Header.Set("X-SkyDrop-Device-ID", s.cfg.DeviceName)
+			resp, err = client.Do(fallbackReq)
+		}
+	}
+
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "connection_failed", fmt.Sprintf("Failed to contact %s: %v", body.DeviceName, err))
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		writeError(w, resp.StatusCode, "remote_error", string(b))
+		return
+	}
+
+	var resData struct {
+		Status    string `json:"status"`
+		RequestID string `json:"request_id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&resData); err != nil || resData.RequestID == "" {
+		writeError(w, http.StatusBadGateway, "invalid_remote_response", "Failed to parse remote response")
+		return
+	}
+
+	// Poll status until accepted, declined, or timeout (up to 45 seconds)
+	statusURL := fmt.Sprintf("%s://%s:%d/pair/request/status?request_id=%s", scheme, body.Host, body.Port, resData.RequestID)
+	deadline := time.Now().Add(45 * time.Second)
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-r.Context().Done():
+			// Cancel remote request if client disconnects
+			cancelURL := fmt.Sprintf("%s://%s:%d/pair/request/cancel", scheme, body.Host, body.Port)
+			cancelPayload, _ := json.Marshal(map[string]string{"request_id": resData.RequestID})
+			if cReq, cErr := http.NewRequest(http.MethodPost, cancelURL, bytes.NewReader(cancelPayload)); cErr == nil {
+				cReq.Header.Set("Content-Type", "application/json")
+				_, _ = client.Do(cReq)
+			}
+			return
+		case <-time.After(1500 * time.Millisecond):
+		}
+
+		stReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, statusURL, nil)
+		if err != nil {
+			continue
+		}
+		stResp, err := client.Do(stReq)
+		if err != nil {
+			continue
+		}
+		var stData struct {
+			Status string `json:"status"`
+		}
+		_ = json.NewDecoder(stResp.Body).Decode(&stData)
+		stResp.Body.Close()
+
+		if stData.Status == "accepted" {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"status":      "accepted",
+				"request_id":  resData.RequestID,
+				"host":        body.Host,
+				"port":        body.Port,
+				"is_tls":      scheme == "https",
+				"device_name": body.DeviceName,
+			})
+			return
+		} else if stData.Status == "declined" {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"status":  "declined",
+				"message": fmt.Sprintf("Pairing request was declined by %s", body.DeviceName),
+			})
+			return
+		} else if stData.Status == "cancelled" || stData.Status == "expired" {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"status":  stData.Status,
+				"message": fmt.Sprintf("Pairing request was %s", stData.Status),
+			})
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "timeout",
+		"message": fmt.Sprintf("Pairing request to %s timed out waiting for approval", body.DeviceName),
 	})
 }
 

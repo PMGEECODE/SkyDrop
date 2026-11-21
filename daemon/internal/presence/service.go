@@ -231,14 +231,23 @@ func (s *Service) checkAllPeers() {
 	s.mu.Lock()
 	// Ensure all paired peers are tracked
 	for _, p := range paired {
-		if _, exists := s.peers[p.ID]; !exists {
+		if existing, exists := s.peers[p.ID]; !exists {
 			s.peers[p.ID] = &PeerPresence{
 				PeerID:         p.ID,
 				DeviceName:     p.DeviceName,
+				Host:           p.Host,
+				Port:           p.Port,
+				IsTLS:          p.IsTLS,
 				State:          StateUnknown,
 				IsPaired:       true,
 				LastSeenAt:     p.LastSeenAt,
 				ConnectionType: "wifi",
+			}
+		} else {
+			if existing.Host == "" && p.Host != "" {
+				existing.Host = p.Host
+				existing.Port = p.Port
+				existing.IsTLS = p.IsTLS
 			}
 		}
 	}
@@ -304,6 +313,25 @@ func (s *Service) probePeer(
 	start := time.Now()
 	resp, err := s.httpClient.Do(req)
 	latency := time.Since(start).Milliseconds()
+
+	// If HTTPS failed due to TLS error / connection reset / EOF, try HTTP fallback
+	if err != nil && isTLS {
+		httpHealthURL := fmt.Sprintf("http://%s:%d/health", host, port)
+		httpReq, httpErr := http.NewRequestWithContext(context.Background(), http.MethodGet, httpHealthURL, nil)
+		if httpErr == nil {
+			if token != "" {
+				httpReq.Header.Set("Authorization", "Bearer "+token)
+			}
+			httpReq.Header.Set("X-SkyDrop-Device-ID", s.localDeviceID)
+			httpReq.Header.Set("X-SkyDrop-Version", AppVersion)
+			if httpResp, fallbackErr := s.httpClient.Do(httpReq); fallbackErr == nil {
+				resp = httpResp
+				err = nil
+				isTLS = false // Successfully connected via HTTP
+				latency = time.Since(start).Milliseconds()
+			}
+		}
+	}
 
 	if err != nil {
 		code := ErrCodeUnreachable
@@ -422,11 +450,18 @@ func (s *Service) resolveEndpoint(
 ) (host string, port int, isTLS bool, token string, fingerprint string) {
 	normPeerName := security.NormalizeDeviceName(peer.DeviceName)
 
+	var pairedHost string
+	var pairedPort int
+	var pairedTLS bool
+
 	// 1. Look for paired credentials
 	for _, p := range paired {
 		if p.ID == peer.PeerID || (normPeerName != "" && security.NormalizeDeviceName(p.DeviceName) == normPeerName) {
 			token = p.AuthToken
 			fingerprint = p.Fingerprint
+			pairedHost = p.Host
+			pairedPort = p.Port
+			pairedTLS = p.IsTLS
 			break
 		}
 	}
@@ -442,9 +477,12 @@ func (s *Service) resolveEndpoint(
 		}
 	}
 
-	// 3. Fallback to cached peer host:port
+	// 3. Fallback to cached peer or paired peer host:port
 	if peer.Host != "" && peer.Port > 0 {
 		return peer.Host, peer.Port, peer.IsTLS, token, fingerprint
+	}
+	if pairedHost != "" && pairedPort > 0 {
+		return pairedHost, pairedPort, pairedTLS, token, fingerprint
 	}
 
 	return "", 0, true, token, fingerprint

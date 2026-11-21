@@ -44,7 +44,13 @@ func maskAuthToken(tok string) string {
 
 // Uploader streams files and text to remote peers.
 type Uploader struct {
-	httpClient *http.Client
+	httpClient    *http.Client
+	localDeviceID string
+}
+
+// SetLocalDeviceID sets the local device identity header sent with outbound requests.
+func (u *Uploader) SetLocalDeviceID(id string) {
+	u.localDeviceID = id
 }
 
 // UploadProgressCallback reports progress during streaming uploads.
@@ -102,6 +108,9 @@ func (u *Uploader) getServerOffset(ctx context.Context, peerURL, filename, authT
 		return 0, err
 	}
 	headReq.Header.Set("X-Filename", filename)
+	if u.localDeviceID != "" {
+		headReq.Header.Set("X-SkyDrop-Device-ID", u.localDeviceID)
+	}
 	if authToken != "" {
 		headReq.Header.Set("Authorization", "Bearer "+authToken)
 	}
@@ -195,6 +204,9 @@ func (u *Uploader) UploadFileWithFilename(
 	}
 	if authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+	if u.localDeviceID != "" {
+		req.Header.Set("X-SkyDrop-Device-ID", u.localDeviceID)
 	}
 
 	log.Printf("[Uploader] Dispatching %s -> %s (Size: %d bytes, Auth: %s)", filename, uploadEndpoint, totalSize, maskAuthToken(authToken))
@@ -365,6 +377,9 @@ func (u *Uploader) SendText(ctx context.Context, peerURL, text, authToken string
 	if authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+authToken)
 	}
+	if u.localDeviceID != "" {
+		req.Header.Set("X-SkyDrop-Device-ID", u.localDeviceID)
+	}
 
 	resp, err := u.httpClient.Do(req)
 	if err != nil {
@@ -396,6 +411,9 @@ func (u *Uploader) PostClipboardItem(ctx context.Context, peerURL string, item i
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	if authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+	if u.localDeviceID != "" {
+		req.Header.Set("X-SkyDrop-Device-ID", u.localDeviceID)
 	}
 
 	resp, err := u.httpClient.Do(req)

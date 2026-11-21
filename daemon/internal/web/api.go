@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -89,6 +90,7 @@ func (wc *WebController) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/send", wc.handleSendFile)
 	mux.HandleFunc("/api/pair/new", wc.handleNewPairSession)
 	mux.HandleFunc("/api/pair/status", wc.handlePairStatus)
+	mux.HandleFunc("/api/pair/confirm", wc.handlePairConfirmOutbound)
 	mux.HandleFunc("/api/pair/unpair", wc.handleUnpairPeer)
 	mux.HandleFunc("/api/settings", wc.handleSettings)
 	mux.HandleFunc("/api/folder/open", wc.handleOpenFolder)
@@ -254,6 +256,132 @@ func (wc *WebController) handlePairStatus(w http.ResponseWriter, r *http.Request
 	_ = json.NewEncoder(w).Encode(res)
 }
 
+func (wc *WebController) handlePairConfirmOutbound(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Host       string `json:"host"`
+		Port       int    `json:"port"`
+		IsTLS      bool   `json:"is_tls"`
+		Secret     string `json:"secret"`
+		DeviceName string `json:"device_name"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Host == "" || req.Secret == "" {
+		http.Error(w, "host and secret are required", http.StatusBadRequest)
+		return
+	}
+
+	if req.Port <= 0 {
+		req.Port = 8443
+	}
+
+	scheme := "http"
+	if req.IsTLS {
+		scheme = "https"
+	}
+
+	confirmPayload := map[string]interface{}{
+		"device_name": wc.cfg.DeviceName,
+		"fingerprint": "",
+		"secret":      req.Secret,
+		"host":        resolveHostIP(r),
+		"port":        wc.cfg.Port,
+		"is_tls":      wc.cfg.EnableTLS,
+		"device_type": "desktop",
+		"device_id":   wc.cfg.DeviceName,
+	}
+
+	bodyBytes, _ := json.Marshal(confirmPayload)
+	confirmURL := fmt.Sprintf("%s://%s:%d/pair/confirm", scheme, req.Host, req.Port)
+
+	client := wc.uploader.HTTPClient()
+	httpReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, confirmURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-SkyDrop-Device-ID", wc.cfg.DeviceName)
+
+	resp, err := client.Do(httpReq)
+	if err != nil && req.IsTLS {
+		// Fallback to HTTP
+		scheme = "http"
+		confirmURL = fmt.Sprintf("http://%s:%d/pair/confirm", req.Host, req.Port)
+		if fbReq, fbErr := http.NewRequestWithContext(r.Context(), http.MethodPost, confirmURL, bytes.NewReader(bodyBytes)); fbErr == nil {
+			fbReq.Header.Set("Content-Type", "application/json")
+			fbReq.Header.Set("X-SkyDrop-Device-ID", wc.cfg.DeviceName)
+			resp, err = client.Do(fbReq)
+		}
+	}
+
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to confirm pairing with %s: %v", req.Host, err), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		http.Error(w, fmt.Sprintf("Remote pairing failed: %s", string(b)), resp.StatusCode)
+		return
+	}
+
+	var resData struct {
+		Status      string `json:"status"`
+		AuthToken   string `json:"auth_token"`
+		DeviceID    string `json:"device_id"`
+		DeviceName  string `json:"device_name"`
+		Fingerprint string `json:"fingerprint"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&resData); err != nil || resData.AuthToken == "" {
+		http.Error(w, "Invalid response from peer", http.StatusBadGateway)
+		return
+	}
+
+	pairedPeer := &security.PairedPeer{
+		ID:          resData.DeviceID,
+		DeviceName:  resData.DeviceName,
+		Host:        req.Host,
+		Port:        req.Port,
+		IsTLS:       scheme == "https",
+		Fingerprint: resData.Fingerprint,
+		AuthToken:   resData.AuthToken,
+		PairedAt:    time.Now().UTC(),
+		LastSeenAt:  time.Now().UTC(),
+	}
+	if pairedPeer.DeviceName == "" {
+		pairedPeer.DeviceName = req.DeviceName
+	}
+	if pairedPeer.ID == "" {
+		pairedPeer.ID = fmt.Sprintf("%s:%d", req.Host, req.Port)
+	}
+
+	if err := wc.pairManager.AddPairedPeer(pairedPeer); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if wc.presenceService != nil {
+		wc.presenceService.TriggerImmediateCheck()
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":      "paired",
+		"device_id":   pairedPeer.ID,
+		"device_name": pairedPeer.DeviceName,
+		"host":        pairedPeer.Host,
+		"port":        pairedPeer.Port,
+		"is_tls":      pairedPeer.IsTLS,
+	})
+}
+
 // resolveHostIP extracts or discovers the best routable IP address for client pairing.
 func resolveHostIP(r *http.Request) string {
 	if r != nil {
@@ -361,10 +489,20 @@ func (wc *WebController) handleSendFile(w http.ResponseWriter, r *http.Request) 
 
 	defer os.Remove(tempFilePath)
 
-	// If no auth token explicitly passed, lookup token from paired store by recency
+	// If no auth token explicitly passed, lookup token from paired store by matching target host
 	if authToken == "" {
 		peersList := wc.pairManager.ListPeers()
-		if len(peersList) > 0 {
+		var targetHost string
+		if u, err := url.Parse(targetURL); err == nil {
+			targetHost = u.Hostname()
+		}
+		for _, p := range peersList {
+			if (targetHost != "" && p.Host == targetHost) || (targetHost != "" && strings.EqualFold(p.DeviceName, targetHost)) {
+				authToken = p.AuthToken
+				break
+			}
+		}
+		if authToken == "" && len(peersList) > 0 {
 			authToken = peersList[0].AuthToken
 		}
 	}

@@ -1106,3 +1106,141 @@ body {
     transform: translateY(0);
   }
 }
+
+/* ─── Wi-Fi Hotspot Section ─────────────────────────────────────────────────── */
+.hotspot-card {
+  transition: all var(--transition-normal);
+}
+
+.hotspot-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface-elevated);
+  color: var(--text-muted);
+  transition: all var(--transition-normal);
+}
+
+.hotspot-icon-wrap.active {
+  background: rgba(14, 165, 233, 0.15);
+  color: var(--color-primary);
+  animation: pulse-hotspot 2.5s infinite;
+}
+
+@keyframes pulse-hotspot {
+  0% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(14, 165, 233, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0); }
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-inactive {
+  background: var(--bg-surface-elevated);
+  color: var(--text-muted);
+}
+
+.badge-active {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.badge-starting {
+  background: rgba(14, 165, 233, 0.15);
+  color: var(--color-primary);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.hotspot-active-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.hotspot-qr-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 140px;
+  flex-shrink: 0;
+}
+
+.hotspot-qr-img {
+  width: 130px;
+  height: 130px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: #ffffff;
+  padding: 6px;
+  box-shadow: var(--shadow-sm);
+}
+
+.hotspot-details-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hotspot-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hotspot-field-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.hotspot-field-val-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hotspot-field-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-icon-tiny {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+  transition: color var(--transition-fast);
+}
+
+.btn-icon-tiny:hover {
+  color: var(--text-main);
+}
+
+.hotspot-error-box {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--color-danger);
+}
+

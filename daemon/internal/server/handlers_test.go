@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -355,5 +356,88 @@ func TestPairingFlowAndAuth(t *testing.T) {
 
 	if authRR.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK with valid bearer token, got: %d (%s)", authRR.Code, authRR.Body.String())
+	}
+}
+
+func TestPairingRequestWorkflow(t *testing.T) {
+	srv, tmpDir := setupTestServer(t, 1024*1024)
+	defer os.RemoveAll(tmpDir)
+
+	// 1. Submit pairing request to /pair/request
+	reqBody := `{"device_name":"Galaxy S24","device_type":"android","host":"192.168.1.50","port":8444,"is_tls":false}`
+	req := httptest.NewRequest(http.MethodPost, "/pair/request", strings.NewReader(reqBody))
+	rr := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 from /pair/request, got: %d (%s)", rr.Code, rr.Body.String())
+	}
+
+	var res struct {
+		Status    string `json:"status"`
+		RequestID string `json:"request_id"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&res); err != nil || res.RequestID == "" {
+		t.Fatalf("failed to decode /pair/request response: %v", err)
+	}
+	if res.Status != "pending" {
+		t.Fatalf("expected status pending, got: %s", res.Status)
+	}
+
+	// 2. Query /pair/request/status -> pending
+	statusReq := httptest.NewRequest(http.MethodGet, "/pair/request/status?request_id="+res.RequestID, nil)
+	statusRR := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(statusRR, statusReq)
+	if statusRR.Code != http.StatusOK {
+		t.Fatalf("expected 200 from /pair/request/status, got: %d", statusRR.Code)
+	}
+
+	// 3. Query /api/pair/incoming -> should have 1 item
+	incomingReq := httptest.NewRequest(http.MethodGet, "/api/pair/incoming", nil)
+	incomingRR := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(incomingRR, incomingReq)
+	if incomingRR.Code != http.StatusOK {
+		t.Fatalf("expected 200 from /api/pair/incoming, got: %d", incomingRR.Code)
+	}
+
+	// 4. Accept the request via /api/pair/incoming/accept
+	acceptBody := fmt.Sprintf(`{"request_id":"%s"}`, res.RequestID)
+	acceptReq := httptest.NewRequest(http.MethodPost, "/api/pair/incoming/accept", strings.NewReader(acceptBody))
+	acceptRR := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(acceptRR, acceptReq)
+	if acceptRR.Code != http.StatusOK {
+		t.Fatalf("expected 200 from /api/pair/incoming/accept, got: %d (%s)", acceptRR.Code, acceptRR.Body.String())
+	}
+
+	var acceptResp struct {
+		Status string `json:"status"`
+		Secret string `json:"secret"`
+	}
+	if err := json.NewDecoder(acceptRR.Body).Decode(&acceptResp); err != nil || acceptResp.Secret == "" {
+		t.Fatalf("failed to decode accept response: %v", err)
+	}
+	if acceptResp.Status != "accepted" {
+		t.Fatalf("expected status accepted, got: %s", acceptResp.Status)
+	}
+
+	// 5. Query /pair/request/status -> accepted
+	stReq2 := httptest.NewRequest(http.MethodGet, "/pair/request/status?request_id="+res.RequestID, nil)
+	stRR2 := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(stRR2, stReq2)
+	var stData struct {
+		Status string `json:"status"`
+	}
+	_ = json.NewDecoder(stRR2.Body).Decode(&stData)
+	if stData.Status != "accepted" {
+		t.Fatalf("expected status accepted on status endpoint, got: %s", stData.Status)
+	}
+
+	// 6. Complete pairing with the generated secret
+	confirmBody := fmt.Sprintf(`{"device_name":"Galaxy S24","secret":"%s","host":"192.168.1.50","port":8444,"is_tls":false}`, acceptResp.Secret)
+	confirmReq := httptest.NewRequest(http.MethodPost, "/pair/confirm", strings.NewReader(confirmBody))
+	confirmRR := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(confirmRR, confirmReq)
+	if confirmRR.Code != http.StatusOK {
+		t.Fatalf("expected 200 from /pair/confirm, got: %d (%s)", confirmRR.Code, confirmRR.Body.String())
 	}
 }

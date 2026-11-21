@@ -60,6 +60,68 @@
       <!-- Screen reader presence announcements -->
       <div id="presence-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
+      <!-- Hotspot Section -->
+      <div id="hotspot-card" class="card hotspot-card" style="margin-bottom: 12px; padding: 12px 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div id="hotspot-status-icon" class="hotspot-icon-wrap">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 700; font-size: 13px;">Wi-Fi Hotspot</span>
+                <span id="hotspot-badge" class="badge badge-inactive">Offline</span>
+              </div>
+              <span id="hotspot-subtext" style="font-size: 11px; color: var(--text-muted);">Host a direct Wi-Fi network for offline peer transfers</span>
+            </div>
+          </div>
+          <button id="btn-toggle-hotspot" class="btn-primary" style="width: auto; padding: 6px 14px; font-size: 12px;">Create Hotspot</button>
+        </div>
+
+        <!-- Hotspot Error / Warning Box -->
+        <div id="hotspot-error-box" class="hotspot-error-box" style="display: none; margin-top: 10px; padding: 10px; border-radius: var(--radius-sm); font-size: 12px; line-height: 1.4;">
+          <div id="hotspot-error-text"></div>
+          <button id="btn-hotspot-disconnect-confirm" class="btn-primary" style="display: none; margin-top: 8px; font-size: 11px; padding: 5px 12px; width: auto;">Disconnect Wi-Fi & Start Hotspot</button>
+        </div>
+
+        <!-- Hotspot Active Info (SSID, Password, IP, QR) -->
+        <div id="hotspot-active-panel" style="display: none; margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+          <div class="hotspot-active-layout">
+            <div class="hotspot-qr-side">
+              <img id="hotspot-qr-img" class="hotspot-qr-img" src="" alt="Wi-Fi Hotspot QR Code">
+              <span style="font-size: 10px; color: var(--text-muted); margin-top: 6px; text-align: center;">Scan with SkyDrop camera to join</span>
+            </div>
+            <div class="hotspot-details-side">
+              <div class="hotspot-field">
+                <span class="hotspot-field-label">Network (SSID)</span>
+                <div class="hotspot-field-val-row">
+                  <span id="hotspot-ssid-text" class="hotspot-field-val">SkyDrop-XXXX</span>
+                  <button id="btn-copy-hotspot-ssid" class="btn-icon-tiny" title="Copy SSID">📋</button>
+                </div>
+              </div>
+              <div class="hotspot-field">
+                <span class="hotspot-field-label">Password</span>
+                <div class="hotspot-field-val-row">
+                  <span id="hotspot-password-text" class="hotspot-field-val">••••••••••••</span>
+                  <button id="btn-reveal-hotspot-password" class="btn-icon-tiny" title="Show/Hide Password">👁</button>
+                  <button id="btn-copy-hotspot-password" class="btn-icon-tiny" title="Copy Password">📋</button>
+                </div>
+              </div>
+              <div class="hotspot-field">
+                <span class="hotspot-field-label">Laptop IP</span>
+                <div class="hotspot-field-val-row">
+                  <span id="hotspot-ip-text" class="hotspot-field-val" style="color: var(--color-primary); font-family: monospace;">10.42.0.1</span>
+                </div>
+              </div>
+              <div class="hotspot-field">
+                <span class="hotspot-field-label">Connected Devices</span>
+                <div id="hotspot-clients-text" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">0 devices connected</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="connection-banner" class="status-banner offline">
         <span>⚪</span> <span id="banner-text">Searching local network for peers...</span>
       </div>
@@ -406,6 +468,20 @@
 
         <div class="setting-row">
           <div class="setting-info">
+            <span class="setting-label">Hotspot Idle Timeout</span>
+            <span class="setting-desc">Auto-stop hotspot when no devices are connected</span>
+          </div>
+          <select id="settings-hotspot-timeout" style="background: var(--bg-surface-elevated); color: var(--text-main); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 4px 8px; font-size: 12px; outline: none;">
+            <option value="0">Never (Stay on)</option>
+            <option value="5">5 minutes</option>
+            <option value="10" selected>10 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
             <span class="setting-label">Thumbnail Cache</span>
             <span id="thumb-cache-stats" class="setting-desc">Calculating...</span>
           </div>
@@ -544,6 +620,39 @@
         <h3 class="pair-success-title">🎉 Paired Successfully!</h3>
         <p id="pair-success-device" class="pair-success-device">Phone</p>
         <p class="pair-success-sub">Device verified and connected. Closing...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incoming Pairing Approval Modal -->
+  <div id="modal-pair-incoming" class="modal-overlay">
+    <div class="modal-card center-content">
+      <div style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+        <div style="font-size: 38px; margin-bottom: 8px;" id="pair-incoming-icon">📱</div>
+        <h3 class="modal-title" id="pair-incoming-title">Pairing Request</h3>
+        <p id="pair-incoming-message" class="modal-desc" style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 6px 0;">Device wants to pair with this computer</p>
+        <p id="pair-incoming-meta" style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">192.168.1.50:8444</p>
+        <div style="display: flex; gap: 10px; width: 100%;">
+          <button id="btn-pair-incoming-decline" class="btn-secondary" style="flex: 1;">Decline</button>
+          <button id="btn-pair-incoming-accept" class="btn-primary" style="flex: 1;">Accept</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Outbound Pairing PIN Input Modal -->
+  <div id="modal-pair-input" class="modal-overlay">
+    <div class="modal-card center-content">
+      <div style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+        <div style="font-size: 36px; margin-bottom: 8px;">🔐</div>
+        <h3 class="modal-title" id="pair-input-title">Enter Pairing PIN</h3>
+        <p id="pair-input-subtext" class="modal-desc">Enter the 6-digit PIN shown on the device</p>
+        <input type="text" id="pair-pin-input-field" maxlength="6" placeholder="000000" style="font-size: 24px; letter-spacing: 6px; text-align: center; width: 180px; padding: 8px; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-weight: bold; margin: 16px 0 8px;" />
+        <div id="pair-pin-input-error" style="color: var(--accent-danger); font-size: 12px; margin-bottom: 12px; display: none;"></div>
+        <div style="display: flex; gap: 10px; width: 100%;">
+          <button id="btn-pair-input-cancel" class="btn-secondary" style="flex: 1;">Cancel</button>
+          <button id="btn-pair-input-submit" class="btn-primary" style="flex: 1;">Pair</button>
+        </div>
       </div>
     </div>
   </div>

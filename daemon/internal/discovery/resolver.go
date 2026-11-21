@@ -140,7 +140,8 @@ func (pr *PeerResolver) DiscoverPeers(ctx context.Context, timeout time.Duration
 			host = strings.TrimSuffix(entry.HostName, ".")
 		}
 
-		isTLS := true
+		hasExplicitTLS := false
+		isTLS := false
 		var fingerprint string
 		var peerOS string
 		var deviceID string
@@ -150,6 +151,7 @@ func (pr *PeerResolver) DiscoverPeers(ctx context.Context, timeout time.Duration
 			if len(parts) == 2 {
 				switch strings.ToLower(parts[0]) {
 				case "tls":
+					hasExplicitTLS = true
 					isTLS = parts[1] == "true" || parts[1] == "1"
 				case "fingerprint":
 					fingerprint = parts[1]
@@ -161,9 +163,34 @@ func (pr *PeerResolver) DiscoverPeers(ctx context.Context, timeout time.Duration
 			}
 		}
 
-		peerID := fmt.Sprintf("%s:%d", host, entry.Port)
-		if deviceID != "" {
-			peerID = deviceID
+		if !hasExplicitTLS {
+			if entry.Port == 8443 {
+				isTLS = true
+			} else {
+				isTLS = false
+			}
+		}
+
+		peerID := deviceID
+		if peerID == "" {
+			// Deduplicate dual-stack IPv4/IPv6 advertisements for the same service
+			pr.mu.RLock()
+			for existingID, p := range pr.peers {
+				if p.Name == entry.Instance && p.Port == entry.Port {
+					peerID = existingID
+					if len(entry.AddrIPv4) > 0 && strings.Contains(p.Host, ":") {
+						host = entry.AddrIPv4[0].String()
+					} else if len(entry.AddrIPv4) == 0 && !strings.Contains(p.Host, ":") {
+						host = p.Host
+					}
+					break
+				}
+			}
+			pr.mu.RUnlock()
+		}
+
+		if peerID == "" {
+			peerID = fmt.Sprintf("%s:%d", host, entry.Port)
 		}
 		peer := DiscoveredPeer{
 			ID:          peerID,
