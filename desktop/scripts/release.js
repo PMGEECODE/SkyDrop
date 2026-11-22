@@ -38,14 +38,13 @@ try {
   execSync('git add desktop/package.json desktop/package-lock.json desktop/RELEASE_NOTES.md', { cwd: repoDir, stdio: 'inherit' });
   execSync(`git commit -m "chore(desktop): release v${version}"`, { cwd: repoDir, stdio: 'inherit' });
 
-  // 6. Create tags
-  console.log(`\n[SkyDrop Automated Release] Creating tags: v${version} and desktop-v${version}...`);
-  execSync(`git tag "v${version}"`, { cwd: repoDir, stdio: 'inherit' });
+  // 6. Create the single workflow trigger tag (desktop-v*) — no v* tag to avoid a parallel duplicate CI run
+  console.log(`\n[SkyDrop Automated Release] Creating release tag: desktop-v${version}...`);
   execSync(`git tag "desktop-v${version}"`, { cwd: repoDir, stdio: 'inherit' });
 
-  // 7. Push commit and tags to origin
-  console.log('\n[SkyDrop Automated Release] Pushing main branch and release tags to GitHub...');
-  execSync(`git push origin main && git push origin "v${version}" && git push origin "desktop-v${version}"`, { cwd: repoDir, stdio: 'inherit' });
+  // 7. Push commit and tag to origin — only desktop-v* triggers the release workflow
+  console.log('\n[SkyDrop Automated Release] Pushing main branch and release tag to GitHub...');
+  execSync(`git push origin main && git push origin "desktop-v${version}"`, { cwd: repoDir, stdio: 'inherit' });
 
   console.log(`\n======================================================`);
   console.log(`🎉 Successfully released SkyDrop v${version}!`);
