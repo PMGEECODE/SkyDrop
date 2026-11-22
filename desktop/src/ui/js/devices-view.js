@@ -176,12 +176,17 @@ class DevicesView {
       this.btnIncomingAccept.addEventListener('click', async () => {
         if (!this.activeIncomingReq) return;
         const req = this.activeIncomingReq;
+        const reqId = req.request_id || req.id;
         this.btnIncomingAccept.disabled = true;
         this.btnIncomingAccept.textContent = 'Accepting...';
         try {
-          await window.skydrop.pairAcceptIncoming(req.id || req.request_id);
+          const res = await window.skydrop.pairAcceptIncoming(reqId);
           this.closeIncomingModal();
-          this.openPairModal();
+          if (res && res.ok && res.data) {
+            this.openPairModal(res.data);
+          } else {
+            this.openPairModal();
+          }
         } catch (err) {
           alert('Failed to accept pairing request: ' + err.message);
         } finally {
@@ -195,8 +200,9 @@ class DevicesView {
       this.btnIncomingDecline.addEventListener('click', async () => {
         if (!this.activeIncomingReq) return;
         const req = this.activeIncomingReq;
+        const reqId = req.request_id || req.id;
         try {
-          await window.skydrop.pairDeclineIncoming(req.id || req.request_id);
+          await window.skydrop.pairDeclineIncoming(reqId);
         } catch (_) {}
         this.closeIncomingModal();
       });
@@ -206,7 +212,8 @@ class DevicesView {
       this.incomingModal.addEventListener('click', (e) => {
         if (e.target === this.incomingModal) {
           if (this.activeIncomingReq) {
-            window.skydrop.pairDeclineIncoming(this.activeIncomingReq.id || this.activeIncomingReq.request_id).catch(() => {});
+            const reqId = this.activeIncomingReq.request_id || this.activeIncomingReq.id;
+            window.skydrop.pairDeclineIncoming(reqId).catch(() => {});
           }
           this.closeIncomingModal();
         }
@@ -240,8 +247,9 @@ class DevicesView {
       window.skydrop.onPresenceUpdate((eventData) => {
         if (!eventData) return;
         if (eventData.type === 'pair_request') {
-          if (eventData.request) {
-            this.enqueueIncomingRequest(eventData.request);
+          const req = eventData.request || eventData;
+          if (req && (req.request_id || req.id)) {
+            this.enqueueIncomingRequest(req);
           }
           return;
         }
@@ -265,9 +273,13 @@ class DevicesView {
   }
 
   enqueueIncomingRequest(req) {
-    if (!req || !req.id) return;
-    if (this.activeIncomingReq && this.activeIncomingReq.id === req.id) return;
-    if (this.incomingQueue.some((r) => r.id === req.id)) return;
+    if (!req) return;
+    const reqId = req.request_id || req.id;
+    if (!reqId) return;
+    if (this.activeIncomingReq && (this.activeIncomingReq.id === reqId || this.activeIncomingReq.request_id === reqId)) return;
+    if (this.incomingQueue.some((r) => (r.id === reqId || r.request_id === reqId))) return;
+    req.id = reqId;
+    req.request_id = reqId;
     this.incomingQueue.push(req);
     if (!this.activeIncomingReq) {
       this.showNextIncomingRequest();
@@ -458,23 +470,31 @@ class DevicesView {
     }
   }
 
-  async openPairModal() {
+  async openPairModal(sessionData = null) {
     this.modal.classList.add('active');
     this.resetPairModalState();
-    this.pinText.textContent = 'Loading...';
-    try {
-      const res = await window.skydrop.getPairSession();
-      if (res.ok && res.data) {
-        this.pinText.textContent = res.data.secret || '------';
-        this.currentPairingUri = res.data.pairing_uri || '';
-        if (res.data.qr_code) {
-          this.qrImg.src = res.data.qr_code;
+    if (sessionData && sessionData.secret) {
+      this.pinText.textContent = sessionData.secret || '------';
+      this.currentPairingUri = sessionData.pairing_uri || '';
+      if (sessionData.qr_code) {
+        this.qrImg.src = sessionData.qr_code;
+      }
+    } else {
+      this.pinText.textContent = 'Loading...';
+      try {
+        const res = await window.skydrop.getPairSession();
+        if (res.ok && res.data) {
+          this.pinText.textContent = res.data.secret || '------';
+          this.currentPairingUri = res.data.pairing_uri || '';
+          if (res.data.qr_code) {
+            this.qrImg.src = res.data.qr_code;
+          }
+        } else {
+          this.pinText.textContent = 'Error';
         }
-      } else {
+      } catch (err) {
         this.pinText.textContent = 'Error';
       }
-    } catch (err) {
-      this.pinText.textContent = 'Error';
     }
 
     this.startPairStatusPolling();
@@ -664,6 +684,7 @@ class DevicesView {
     const pairedNames = new Set(paired.map((p) => this.normalizeName(p.device_name)));
     const pairedHosts = new Set(paired.map((p) => p.host).filter(Boolean));
     const pairedIds = new Set(paired.map((p) => p.id));
+    const seenEndpoints = new Set();
 
     const unpairedDiscovered = peers.filter((p) => {
       if (p.is_paired) return false;
@@ -671,6 +692,10 @@ class DevicesView {
       if (p.host && pairedHosts.has(p.host)) return false;
       const norm = this.normalizeName(p.name);
       if (pairedNames.has(norm)) return false;
+      // Deduplicate discovered peers sharing identical host and port
+      const endpoint = p.host ? `${p.host}:${p.port || 0}` : p.id;
+      if (seenEndpoints.has(endpoint)) return false;
+      seenEndpoints.add(endpoint);
       return true;
     });
     if (unpairedDiscovered.length === 0 && paired.length === 0) {

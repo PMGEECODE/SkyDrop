@@ -1,6 +1,6 @@
 {
   "name": "skydrop-desktop",
-  "version": "1.0.29",
+  "version": "1.0.39",
   "description": "SkyDrop - Fast, private local file drop for Linux and mobile",
   "homepage": "https://github.com/PMGEECODE/skydrop",
   "author": {
@@ -14,11 +14,29 @@
     "test": "node tests/desktop.test.js",
     "bump": "node scripts/bump-version.js",
     "build:daemon": "node scripts/build-daemon.js",
-    "build": "npm run dist:deb",
+    "build:daemon:win": "node scripts/build-daemon.js --win",
+    "build:daemon:all": "node scripts/build-daemon.js --all",
+    "prebuild": "node scripts/bump-version.js",
+    "build": "npm run dist",
+    "postbuild": "node scripts/copy-release.js",
+    "prebuild:all": "node scripts/bump-version.js",
     "build:all": "npm run dist",
+    "postbuild:all": "node scripts/copy-release.js",
+    "predist": "node scripts/bump-version.js",
     "dist": "npm run build:daemon && electron-builder --linux",
+    "postdist": "node scripts/copy-release.js",
+    "predist:appimage": "node scripts/bump-version.js",
     "dist:appimage": "npm run build:daemon && electron-builder --linux AppImage",
-    "dist:deb": "npm run build:daemon && electron-builder --linux deb"
+    "postdist:appimage": "node scripts/copy-release.js",
+    "predist:deb": "node scripts/bump-version.js",
+    "dist:deb": "npm run build:daemon && electron-builder --linux deb",
+    "postdist:deb": "node scripts/copy-release.js",
+    "predist:win": "node scripts/bump-version.js",
+    "dist:win": "npm run build:daemon:win && electron-builder --win nsis:x64",
+    "postdist:win": "node scripts/copy-release.js",
+    "predist:all": "node scripts/bump-version.js",
+    "dist:all": "npm run build:daemon:all && electron-builder --linux --win",
+    "postdist:all": "node scripts/copy-release.js"
   },
   "keywords": [
     "file-transfer",
@@ -43,6 +61,35 @@
       "category": "Network",
       "synopsis": "Seamless local network file dropping",
       "icon": "assets/icon.png"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "extraResources": [
+        {
+          "from": "bin/skydrop-daemon.exe",
+          "to": "bin/skydrop-daemon.exe"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SkyDrop",
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "uninstallDisplayName": "${productName}"
     },
     "deb": {
       "afterInstall": "build/debian/after-install.sh"

@@ -95,6 +95,13 @@ X-GNOME-Autostart-enabled=true
   }
 
   isEnabled() {
+    if (process.platform === 'win32') {
+      if (this.app && typeof this.app.getLoginItemSettings === 'function') {
+        return this.app.getLoginItemSettings().openAtLogin;
+      }
+      return Boolean(this.getSettings().autostart);
+    }
+
     try {
       if (!fs.existsSync(this.desktopFilePath)) {
         return false;
@@ -112,6 +119,19 @@ X-GNOME-Autostart-enabled=true
 
   enable() {
     try {
+      if (process.platform === 'win32') {
+        if (this.app && typeof this.app.setLoginItemSettings === 'function') {
+          this.app.setLoginItemSettings({
+            openAtLogin: true,
+            path: this.getExecPath(),
+            args: ['--hidden']
+          });
+        }
+        this.saveSettings({ autostart: true });
+        console.log('[AutostartManager] Windows LoginItem registered');
+        return { ok: true, enabled: true };
+      }
+
       if (!fs.existsSync(this.autostartDir)) {
         fs.mkdirSync(this.autostartDir, { recursive: true });
       }
@@ -128,6 +148,17 @@ X-GNOME-Autostart-enabled=true
 
   disable() {
     try {
+      if (process.platform === 'win32') {
+        if (this.app && typeof this.app.setLoginItemSettings === 'function') {
+          this.app.setLoginItemSettings({
+            openAtLogin: false
+          });
+        }
+        this.saveSettings({ autostart: false });
+        console.log('[AutostartManager] Windows LoginItem unregistered');
+        return { ok: true, enabled: false };
+      }
+
       if (fs.existsSync(this.desktopFilePath)) {
         fs.unlinkSync(this.desktopFilePath);
       }

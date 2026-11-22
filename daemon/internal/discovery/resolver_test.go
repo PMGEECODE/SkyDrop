@@ -107,3 +107,36 @@ func TestPeerResolver_SelfFiltering(t *testing.T) {
 		t.Errorf("expected only AndroidPhone, got %s", filtered[0].Name)
 	}
 }
+
+func TestPeerResolver_PruningAndDeduplication(t *testing.T) {
+	pr := NewPeerResolver()
+
+	now := time.Now().UTC()
+	stalePeer := DiscoveredPeer{
+		ID:       "old-peer-id",
+		Name:     "Galaxy A55",
+		Host:     "192.168.1.100",
+		Port:     8444,
+		LastSeen: now.Add(-10 * time.Minute), // 10 minutes old
+	}
+	activePeer := DiscoveredPeer{
+		ID:       "new-peer-id",
+		Name:     "Galaxy A55",
+		Host:     "192.168.1.100",
+		Port:     8444,
+		LastSeen: now,
+	}
+
+	pr.mu.Lock()
+	pr.peers[stalePeer.ID] = stalePeer
+	pr.peers[activePeer.ID] = activePeer
+	pr.mu.Unlock()
+
+	cached := pr.GetCachedPeers()
+	if len(cached) != 1 {
+		t.Fatalf("expected exactly 1 peer after pruning and deduplication, got %d", len(cached))
+	}
+	if cached[0].ID != "new-peer-id" {
+		t.Errorf("expected active peer 'new-peer-id', got '%s'", cached[0].ID)
+	}
+}

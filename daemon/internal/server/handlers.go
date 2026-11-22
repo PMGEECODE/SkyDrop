@@ -746,7 +746,9 @@ func (s *Server) handlePairInitiate(w http.ResponseWriter, r *http.Request) {
 		scheme = "https"
 	}
 
+	reqID := fmt.Sprintf("req-%x", time.Now().UnixNano())
 	reqPayload := security.PairRequest{
+		ID:          reqID,
 		DeviceID:    s.cfg.DeviceName,
 		DeviceName:  s.cfg.DeviceName,
 		DeviceType:  "desktop",
@@ -796,9 +798,12 @@ func (s *Server) handlePairInitiate(w http.ResponseWriter, r *http.Request) {
 		Status    string `json:"status"`
 		RequestID string `json:"request_id"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&resData); err != nil || resData.RequestID == "" {
+	if err := json.NewDecoder(resp.Body).Decode(&resData); err != nil {
 		writeError(w, http.StatusBadGateway, "invalid_remote_response", "Failed to parse remote response")
 		return
+	}
+	if resData.RequestID == "" {
+		resData.RequestID = reqPayload.ID
 	}
 
 	// Poll status until accepted, declined, or timeout (up to 45 seconds)

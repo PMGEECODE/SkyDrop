@@ -26,11 +26,16 @@ class DaemonManager {
   }
 
   resolveBinaryPath() {
+    const isWin = process.platform === 'win32';
+    const binName = isWin ? 'skydrop-daemon.exe' : 'skydrop-daemon';
     const candidatePaths = [
+      process.resourcesPath ? path.join(process.resourcesPath, 'bin', binName) : null,
+      path.resolve(__dirname, `../bin/${binName}`),
+      path.resolve(__dirname, `../../daemon/bin/${binName}`),
+      path.resolve(__dirname, `../../desktop/bin/${binName}`),
+      // Linux fallback paths if running under compatibility layer
       process.resourcesPath ? path.join(process.resourcesPath, 'bin', 'skydrop-daemon') : null,
-      path.resolve(__dirname, '../bin/skydrop-daemon'),
-      path.resolve(__dirname, '../../daemon/bin/skydrop-daemon'),
-      path.resolve(__dirname, '../../desktop/bin/skydrop-daemon')
+      path.resolve(__dirname, '../bin/skydrop-daemon')
     ].filter(Boolean);
 
     for (const p of candidatePaths) {
@@ -38,7 +43,7 @@ class DaemonManager {
         return p;
       }
     }
-    return 'skydrop-daemon';
+    return binName;
   }
 
   async checkRunning() {
@@ -96,6 +101,7 @@ class DaemonManager {
       }
 
       this.childProcess = spawn(binPath, [], {
+        windowsHide: true,
         env: {
           ...process.env,
           SKYDROP_PORT: String(this.port),

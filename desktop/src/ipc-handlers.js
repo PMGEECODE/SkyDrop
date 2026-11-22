@@ -470,6 +470,11 @@ function registerIpcHandlers(mainWindow, daemonManager, thumbnailManager, autost
                     } else {
                       mainWindow.webContents.send('presence-update', eventData);
                     }
+                    if (eventData.type === 'pair_request') {
+                      if (mainWindow.isMinimized()) mainWindow.restore();
+                      mainWindow.show();
+                      mainWindow.focus();
+                    }
                   }
                 } catch (_) {}
               }

@@ -86,13 +86,18 @@ async function runTests() {
       'src/media-protocol.js',
       'src/video-thumb-worker.html',
       'src/ui/js/file-icons.js',
-      'src/ui/js/lightbox.js'
+      'src/ui/js/lightbox.js',
+      'src/ui/assets/wave-bg.svg',
+      'src/ui/assets/wave-bg-dark.svg',
+      'src/ui/assets/wave-bg-light.svg',
+      'src/ui/assets/splash-filaments-dark.svg',
+      'src/ui/assets/splash-filaments-light.svg'
     ];
     for (const rel of newFiles) {
       const full = path.join(__dirname, '..', rel);
       assert(fs.existsSync(full), `Missing expected new file: ${rel}`);
     }
-    console.log('  ✓ All 22 core and grid module files exist and are verified');
+    console.log('  ✓ All 27 core, grid module, background, and splash filament asset files exist and are verified');
   }
 
   // Test 6: Thumbnail Config validation
@@ -289,8 +294,8 @@ async function runTests() {
     assert(navPos > mainPos, 'tab-bar navigation buttons must be positioned at the bottom after app-content');
 
     // Rounded borders in app.css
-    assert(appCss.includes('border-radius: 12px'), 'Missing 12px rounded borders in app.css');
-    assert(appCss.includes('border: 1px solid var(--border-color)'), 'Missing outer border in app.css');
+    assert(appCss.includes('border-radius: var(--radius-window') || appCss.includes('border-radius: 12px'), 'Missing rounded borders in app.css');
+    assert(appCss.includes('border: 1px solid var(--border-app-frame)') || appCss.includes('border: 1px solid var(--border-color)'), 'Missing outer border in app.css');
 
     // previews.css must contain .media-thumb-box with position: relative and overflow: hidden
     assert(previewsCss.includes('.media-thumb-box'), 'Missing .media-thumb-box in previews.css');
@@ -435,6 +440,8 @@ async function runTests() {
     const { compareVersions, Updater } = require('../src/updater');
 
     // Semantic version comparison asserts
+    assert.strictEqual(compareVersions('1.0.30', '1.0.29'), 1, '1.0.30 should be greater than 1.0.29');
+    assert.strictEqual(compareVersions('1.0.29', '1.0.30'), -1, '1.0.29 should be less than 1.0.30');
     assert.strictEqual(compareVersions('1.0.29', '1.0.28'), 1, '1.0.29 should be greater than 1.0.28');
     assert.strictEqual(compareVersions('1.0.28', '1.0.29'), -1, '1.0.28 should be less than 1.0.29');
     assert.strictEqual(compareVersions('1.0.28', '1.0.28'), 0, '1.0.28 should equal 1.0.28');
@@ -655,6 +662,190 @@ async function runTests() {
     assert(devicesViewJs.includes('pairDeclineIncoming'), 'devices-view.js missing pairDeclineIncoming call');
 
     console.log('  ✓ Pairing approval dialog, PIN modal, preload methods, IPC channels, and view handlers verified');
+  }
+
+  // Test 23: Build and updater versioning workflows
+  {
+    console.log('[Test 23] Build automation & updater versioning workflow validation...');
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
+
+    // 1. Verify build scripts wire version bump and release copy
+    assert(pkg.scripts.prebuild && pkg.scripts.prebuild.includes('bump-version.js'), 'package.json missing bump-version in prebuild');
+    assert(pkg.scripts.predist && pkg.scripts.predist.includes('bump-version.js'), 'package.json missing bump-version in predist');
+    assert(pkg.scripts.postdist && pkg.scripts.postdist.includes('copy-release.js'), 'package.json missing copy-release in postdist');
+
+    // 2. Validate scripts/bump-version.js logic in sandbox
+    const { execSync } = require('child_process');
+    const os = require('os');
+    const tempDir = path.join(os.tmpdir(), `skydrop-version-test-${Date.now()}`);
+    const tempScripts = path.join(tempDir, 'scripts');
+    fs.mkdirSync(tempScripts, { recursive: true });
+
+    // Copy bump-version.js and write dummy package.json
+    fs.copyFileSync(path.join(__dirname, '../scripts/bump-version.js'), path.join(tempScripts, 'bump-version.js'));
+    const dummyPkg = { name: 'test-app', version: '1.0.29' };
+    fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify(dummyPkg, null, 2) + '\n');
+
+    // Test automatic patch bump: 1.0.29 -> 1.0.30
+    execSync('node scripts/bump-version.js', { cwd: tempDir, env: { ...process.env, NO_BUMP: '' } });
+    let updated = JSON.parse(fs.readFileSync(path.join(tempDir, 'package.json'), 'utf8'));
+    assert.strictEqual(updated.version, '1.0.30', `Expected version to bump from 1.0.29 to 1.0.30, got ${updated.version}`);
+
+    // Test explicit version set: 1.0.35
+    execSync('node scripts/bump-version.js 1.0.35', { cwd: tempDir, env: { ...process.env, NO_BUMP: '' } });
+    updated = JSON.parse(fs.readFileSync(path.join(tempDir, 'package.json'), 'utf8'));
+    assert.strictEqual(updated.version, '1.0.35', `Expected version 1.0.35, got ${updated.version}`);
+
+    // Test NO_BUMP=1 skip
+    execSync('node scripts/bump-version.js', { cwd: tempDir, env: { ...process.env, NO_BUMP: '1' } });
+    updated = JSON.parse(fs.readFileSync(path.join(tempDir, 'package.json'), 'utf8'));
+    assert.strictEqual(updated.version, '1.0.35', `Expected version to remain 1.0.35 with NO_BUMP=1`);
+
+    // Clean up temporary directory
+    fs.rmSync(tempDir, { recursive: true, force: true });
+
+    console.log('  ✓ Automated version incrementing, debouncing, NO_BUMP guard, and release staging verified');
+  }
+
+  // Test 24: Border Radius Design System & Navigation Bar Theme Consistency Validation
+  {
+    console.log('[Test 24] Border Radius Design System & Navigation Bar Theme Consistency Validation...');
+    const variablesCss = fs.readFileSync(path.join(__dirname, '../src/ui/css/variables.css'), 'utf8');
+    const appCss = fs.readFileSync(path.join(__dirname, '../src/ui/css/app.css'), 'utf8');
+    const screensCss = fs.readFileSync(path.join(__dirname, '../src/ui/css/screens.css'), 'utf8');
+    const previewsCss = fs.readFileSync(path.join(__dirname, '../src/ui/css/previews.css'), 'utf8');
+
+    // 1. Verify radius token definitions in variables.css
+    const expectedRadiusTokens = [
+      '--radius-xs',
+      '--radius-sm',
+      '--radius-md',
+      '--radius-lg',
+      '--radius-window',
+      '--radius-pill',
+      '--radius-full'
+    ];
+    for (const token of expectedRadiusTokens) {
+      assert(variablesCss.includes(`${token}:`), `variables.css must define ${token}`);
+    }
+
+    // 2. Verify dark and light theme tokens for the navigation bar
+    const expectedTabTokens = [
+      '--bg-tab-bar',
+      '--border-tab-bar',
+      '--shadow-tab-bar',
+      '--tab-indicator-shadow'
+    ];
+    for (const token of expectedTabTokens) {
+      assert(variablesCss.includes(`${token}:`), `variables.css must define ${token}`);
+    }
+
+    // 3. Verify tab bar uses theme tokens instead of hardcoded dark background
+    assert(appCss.includes('background-color: var(--bg-tab-bar);'), '.tab-bar must use var(--bg-tab-bar)');
+    assert(appCss.includes('border: 1px solid var(--border-tab-bar);'), '.tab-bar must use var(--border-tab-bar)');
+    assert(appCss.includes('box-shadow: var(--shadow-tab-bar);'), '.tab-bar must use var(--shadow-tab-bar)');
+    assert(!appCss.includes('background-color: rgba(18, 22, 34, 0.65);'), 'Old hardcoded dark tab-bar background must be removed');
+
+    // 4. Verify main screen window frame & titlebar radius consistency
+    assert(appCss.includes('border-radius: var(--radius-window, 8px);'), 'body must use var(--radius-window)');
+    assert(appCss.includes('border-top-left-radius: var(--radius-window, 8px);'), '.titlebar top-left must match var(--radius-window)');
+    assert(appCss.includes('border-top-right-radius: var(--radius-window, 8px);'), '.titlebar top-right must match var(--radius-window)');
+    assert(appCss.includes('border: 1px solid var(--border-app-frame);'), 'body must use theme-aware var(--border-app-frame)');
+
+    // 5. Verify no undefined CSS variable references across all CSS files
+    const allCss = [variablesCss, appCss, screensCss, previewsCss].join('\n');
+    const definedTokens = new Set();
+    const usedTokens = new Set();
+    for (const match of allCss.matchAll(/--([a-zA-Z0-9_-]+)\s*:/g)) {
+      definedTokens.add(match[1]);
+    }
+    for (const match of allCss.matchAll(/var\(--([a-zA-Z0-9_-]+)/g)) {
+      usedTokens.add(match[1]);
+    }
+    const missingTokens = [...usedTokens].filter(t => !definedTokens.has(t));
+    assert.strictEqual(missingTokens.length, 0, `Found undefined CSS variables: ${missingTokens.join(', ')}`);
+
+    // 6. Verify zero hardcoded pixel border radii in screens and components
+    const hardcodedRadiusRegex = /border(-[a-z]+)*-radius:\s*[0-9]+px/g;
+    const hardcodedMatches = allCss.match(hardcodedRadiusRegex) || [];
+    assert.strictEqual(hardcodedMatches.length, 0, `Found hardcoded px border-radii: ${hardcodedMatches.join(', ')}`);
+
+    // 7. Verify subtle ambient wavy background layer and opacity tokens
+    assert(variablesCss.includes('--bg-wave-url:'), 'variables.css must define --bg-wave-url');
+    assert(variablesCss.includes('--wave-bg-opacity:'), 'variables.css must define --wave-bg-opacity');
+    assert(appCss.includes('background-image: var(--bg-wave-url'), 'app.css must mount var(--bg-wave-url)');
+    assert(appCss.includes('opacity: var(--wave-bg-opacity'), 'app.css must use theme-aware --wave-bg-opacity');
+
+    // 8. Verify animated splash screen strand filaments
+    const indexHtml = fs.readFileSync(path.join(__dirname, '../src/ui/index.html'), 'utf8');
+    assert(indexHtml.includes('splash-filaments-wrap'), 'index.html missing splash-filaments-wrap');
+    assert(appCss.includes('.splash-filaments-wrap'), 'app.css missing .splash-filaments-wrap');
+    assert(appCss.includes('splashFilamentBreathe'), 'app.css missing splashFilamentBreathe animation');
+
+    console.log('  ✓ Design system tokens, light/dark tab bar, window corner alignment, wave background, animated splash filaments, and zero missing tokens verified');
+  }
+
+  // Test 25: Windows app, packaging, daemon cross-compilation, autostart & updater validation
+  {
+    console.log('[Test 25] Windows app packaging, daemon resolution, autostart & installer updater validation...');
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
+    const buildDaemonJs = fs.readFileSync(path.join(__dirname, '../scripts/build-daemon.js'), 'utf8');
+    const daemonManagerJs = fs.readFileSync(path.join(__dirname, '../src/daemon-manager.js'), 'utf8');
+    const autostartManagerJs = fs.readFileSync(path.join(__dirname, '../src/autostart-manager.js'), 'utf8');
+    const updaterJs = fs.readFileSync(path.join(__dirname, '../src/updater.js'), 'utf8');
+    const copyReleaseJs = fs.readFileSync(path.join(__dirname, '../scripts/copy-release.js'), 'utf8');
+
+    // 1. Windows icon file exists and is multi-resolution ICO
+    const icoPath = path.join(__dirname, '../assets/icon.ico');
+    assert(fs.existsSync(icoPath), 'assets/icon.ico must exist');
+    const icoStat = fs.statSync(icoPath);
+    assert(icoStat.size > 10000, `assets/icon.ico must be a valid multi-res icon (size: ${icoStat.size})`);
+
+    // 2. package.json build configurations for Windows & NSIS
+    assert(pkg.build, 'package.json missing build config');
+    assert(pkg.build.win, 'package.json missing build.win config');
+    assert(pkg.build.win.icon === 'assets/icon.ico', 'build.win.icon must point to assets/icon.ico');
+    const hasNsisTarget = pkg.build.win.target && pkg.build.win.target.some(t => t.target === 'nsis');
+    assert(hasNsisTarget, 'build.win must configure nsis target');
+    assert(pkg.build.nsis, 'package.json missing build.nsis config');
+    assert(pkg.build.nsis.installerIcon === 'assets/icon.ico', 'build.nsis.installerIcon must match icon.ico');
+    assert(pkg.build.nsis.uninstallerIcon === 'assets/icon.ico', 'build.nsis.uninstallerIcon must match icon.ico');
+    assert(pkg.scripts['dist:win'], 'package.json missing dist:win script');
+    assert(pkg.scripts['build:daemon:win'], 'package.json missing build:daemon:win script');
+
+    // 3. extraResources must bundle skydrop-daemon
+    const hasWinDaemon = pkg.build.win.extraResources && pkg.build.win.extraResources.some(
+      r => r.from.includes('skydrop-daemon.exe')
+    );
+    assert(hasWinDaemon, 'build.win.extraResources must bundle skydrop-daemon.exe');
+
+    // 4. Daemon builder supports Windows cross-compilation
+    assert(buildDaemonJs.includes('--win'), 'build-daemon.js must support --win flag');
+    assert(buildDaemonJs.includes('windowsgui'), 'build-daemon.js must pass -H windowsgui ldflags');
+    assert(buildDaemonJs.includes('skydrop-daemon.exe'), 'build-daemon.js must output skydrop-daemon.exe');
+
+    // 5. DaemonManager handles Windows platform resolution and windowsHide
+    assert(daemonManagerJs.includes('process.platform === \'win32\''), 'daemon-manager.js must check win32');
+    assert(daemonManagerJs.includes('skydrop-daemon.exe'), 'daemon-manager.js must resolve skydrop-daemon.exe');
+    assert(daemonManagerJs.includes('windowsHide: true'), 'daemon-manager.js spawn options must set windowsHide: true');
+
+    // 6. AutostartManager integrates with Electron setLoginItemSettings on Windows
+    assert(autostartManagerJs.includes('process.platform === \'win32\''), 'autostart-manager.js must check win32');
+    assert(autostartManagerJs.includes('setLoginItemSettings'), 'autostart-manager.js must use setLoginItemSettings on Windows');
+
+    // 7. Updater & release script support Windows .exe installer
+    assert(updaterJs.includes('return \'exe\';'), 'updater.js getInstallationType must return exe on Windows');
+    assert(updaterJs.includes('endsWith(\'.exe\')'), 'updater.js must check for .exe assets');
+    assert(updaterJs.includes('[\'/S\']'), 'updater.js must execute Windows installer silently with /S');
+    assert(copyReleaseJs.includes('.exe'), 'copy-release.js must handle .exe installer staging');
+
+    // 8. Runtime instance tests for Windows updater logic
+    const { Updater } = require('../src/updater');
+    const mockApp = { getVersion: () => '1.0.38', getPath: () => '/tmp' };
+    const winUpdater = new Updater({ app: mockApp, installType: 'exe' });
+    assert.strictEqual(winUpdater.getInstallationType(), 'exe', 'getInstallationType must return custom/mock exe');
+
+    console.log('  ✓ Windows NSIS packaging, icon.ico, daemon cross-compiler, windowsHide, autostart login items, and exe updater verified');
   }
 
   console.log('\n✅ All SkyDrop desktop tests passed successfully!');

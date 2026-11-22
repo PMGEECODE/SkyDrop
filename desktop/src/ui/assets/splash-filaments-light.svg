@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 700" fill="none" preserveAspectRatio="none">
+  <defs>
+    <!-- Light Theme SkyDrop Blue / Indigo Gradients -->
+    <filter id="spineGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <linearGradient id="spineGradA" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0284C7" stop-opacity="0.50"/>
+      <stop offset="40%" stop-color="#0EA5E9" stop-opacity="0.75"/>
+      <stop offset="70%" stop-color="#6366F1" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#A855F7" stop-opacity="0.45"/>
+    </linearGradient>
+
+    <linearGradient id="spineGradB" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.55"/>
+      <stop offset="40%" stop-color="#0EA5E9" stop-opacity="0.70"/>
+      <stop offset="70%" stop-color="#6366F1" stop-opacity="0.60"/>
+      <stop offset="100%" stop-color="#0284C7" stop-opacity="0.40"/>
+    </linearGradient>
+
+    <linearGradient id="gradA1" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.40"/>
+      <stop offset="50%" stop-color="#0EA5E9" stop-opacity="0.60"/>
+      <stop offset="100%" stop-color="#6366F1" stop-opacity="0.45"/>
+    </linearGradient>
+
+    <linearGradient id="gradA2" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0284C7" stop-opacity="0.35"/>
+      <stop offset="50%" stop-color="#6366F1" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#818CF8" stop-opacity="0.35"/>
+    </linearGradient>
+
+    <linearGradient id="gradB1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.45"/>
+      <stop offset="50%" stop-color="#0EA5E9" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#6366F1" stop-opacity="0.40"/>
+    </linearGradient>
+
+    <linearGradient id="gradB2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.40"/>
+      <stop offset="50%" stop-color="#818CF8" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#A855F7" stop-opacity="0.30"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Ambient Space Speckles -->
+  <g id="splash-speckles">
+    <circle cx="70.2" cy="293.5" r="0.6" fill="#0EA5E9" opacity="0.12"/>
+    <circle cx="183.1" cy="287.6" r="0.68" fill="#0284C7" opacity="0.28"/>
+    <circle cx="71.7" cy="54.5" r="1.13" fill="#6366F1" opacity="0.3"/>
+    <circle cx="117.7" cy="600.2" r="1.18" fill="#38BDF8" opacity="0.16"/>
+    <circle cx="285.9" cy="216.3" r="1.35" fill="#6366F1" opacity="0.28"/>
+    <circle cx="64.3" cy="213.3" r="0.94" fill="#0284C7" opacity="0.19"/>
+    <circle cx="307.0" cy="378.3" r="1.28" fill="#6366F1" opacity="0.12"/>
+    <circle cx="411.7" cy="227.6" r="1.18" fill="#38BDF8" opacity="0.16"/>
+    <circle cx="345.5" cy="301.1" r="1.25" fill="#0284C7" opacity="0.19"/>
+    <circle cx="148.8" cy="353.7" r="0.76" fill="#38BDF8" opacity="0.11"/>
+    <circle cx="64.1" cy="640.5" r="0.99" fill="#0EA5E9" opacity="0.19"/>
+    <circle cx="266.4" cy="629.7" r="1.23" fill="#38BDF8" opacity="0.28"/>
+    <circle cx="283.7" cy="391.2" r="0.83" fill="#0284C7" opacity="0.29"/>
+    <circle cx="38.0" cy="461.5" r="1.06" fill="#0EA5E9" opacity="0.22"/>
+    <circle cx="481.2" cy="307.4" r="0.8" fill="#6366F1" opacity="0.18"/>
+    <circle cx="134.3" cy="296.2" r="1.16" fill="#0284C7" opacity="0.15"/>
+    <circle cx="339.4" cy="298.8" r="0.65" fill="#0284C7" opacity="0.12"/>
+    <circle cx="93.8" cy="367.3" r="1.26" fill="#0EA5E9" opacity="0.22"/>
+    <circle cx="239.7" cy="121.5" r="1.05" fill="#0284C7" opacity="0.24"/>
+    <circle cx="249.5" cy="584.1" r="1.29" fill="#0284C7" opacity="0.14"/>
+    <circle cx="224.9" cy="591.3" r="0.82" fill="#38BDF8" opacity="0.12"/>
+    <circle cx="199.2" cy="115.2" r="0.94" fill="#38BDF8" opacity="0.22"/>
+    <circle cx="393.6" cy="71.1" r="1.07" fill="#0284C7" opacity="0.11"/>
+    <circle cx="36.7" cy="233.2" r="1.17" fill="#0EA5E9" opacity="0.28"/>
+    <circle cx="65.6" cy="366.5" r="0.63" fill="#6366F1" opacity="0.13"/>
+    <circle cx="79.7" cy="193.4" r="0.63" fill="#0284C7" opacity="0.23"/>
+    <circle cx="365.0" cy="197.5" r="1.23" fill="#0284C7" opacity="0.1"/>
+    <circle cx="365.2" cy="325.2" r="0.76" fill="#0284C7" opacity="0.28"/>
+    <circle cx="403.3" cy="286.7" r="0.61" fill="#0284C7" opacity="0.13"/>
+    <circle cx="362.0" cy="471.2" r="1.22" fill="#0284C7" opacity="0.12"/>
+    <circle cx="276.3" cy="395.1" r="0.88" fill="#0284C7" opacity="0.18"/>
+    <circle cx="263.8" cy="294.2" r="0.93" fill="#6366F1" opacity="0.19"/>
+    <circle cx="315.8" cy="503.3" r="1.24" fill="#0284C7" opacity="0.13"/>
+    <circle cx="302.3" cy="329.4" r="1.22" fill="#38BDF8" opacity="0.3"/>
+    <circle cx="366.2" cy="345.1" r="0.67" fill="#38BDF8" opacity="0.18"/>
+    <circle cx="430.4" cy="142.4" r="0.76" fill="#6366F1" opacity="0.22"/>
+    <circle cx="363.8" cy="57.4" r="1.1" fill="#38BDF8" opacity="0.13"/>
+    <circle cx="142.6" cy="112.1" r="1.05" fill="#38BDF8" opacity="0.13"/>
+    <circle cx="323.0" cy="539.4" r="1.3" fill="#0284C7" opacity="0.29"/>
+    <circle cx="478.7" cy="466.4" r="0.85" fill="#0EA5E9" opacity="0.21"/>
+  </g>
+
+  <!-- Ascending Silk Wave Ribbon -->
+  <g id="ribbon-A">
+    <path d="M -30.0,680.0 C 80.0,560.0 180.0,430.0 260.0,405.0 C 340.0,380.0 440.0,220.0 550.0,60.0" stroke="url(#gradA1)" stroke-width="0.5" stroke-opacity="0.08" fill="none"/>
+    <path d="M -28.9,680.8 C 80.8,560.8 180.5,430.6 260.0,405.8 C 339.5,381.0 440.3,221.1 550.2,61.3" stroke="url(#gradA2)" stroke-width="0.5" stroke-opacity="0.085" fill="none"/>
+    <path d="M -27.3,681.9 C 81.9,561.9 181.2,431.5 260.0,406.9 C 338.8,382.3 440.8,222.7 550.4,63.1" stroke="url(#gradA1)" stroke-width="0.51" stroke-opacity="0.092" fill="none"/>
+    <path d="M -25.5,683.2 C 83.2,563.2 181.9,432.6 260.0,408.2 C 338.1,383.8 441.3,224.5 550.6,65.1" stroke="url(#gradA2)" stroke-width="0.51" stroke-opacity="0.101" fill="none"/>
+    <path d="M -23.6,684.6 C 84.6,564.6 182.8,433.7 260.0,409.6 C 337.2,385.5 441.8,226.4 550.9,67.4" stroke="url(#gradA1)" stroke-width="0.52" stroke-opacity="0.11" fill="none"/>
+    <path d="M -21.5,686.1 C 86.1,566.1 183.6,434.9 260.0,411.1 C 336.4,387.3 442.4,228.5 551.2,69.7" stroke="url(#gradA2)" stroke-width="0.53" stroke-opacity="0.12" fill="none"/>
+    <path d="M -19.3,687.6 C 87.6,567.6 184.6,436.1 260.0,412.6 C 335.4,389.2 443.1,230.7 551.5,72.2" stroke="url(#gradA1)" stroke-width="0.55" stroke-opacity="0.131" fill="none"/>
+    <path d="M -17.1,689.2 C 89.2,569.2 185.5,437.4 260.0,414.2 C 334.5,391.1 443.7,232.9 551.8,74.8" stroke="url(#gradA2)" stroke-width="0.56" stroke-opacity="0.142" fill="none"/>
+    <path d="M -14.7,690.9 C 90.9,570.9 186.6,438.7 260.0,415.9 C 333.4,393.1 444.4,235.3 552.2,77.5" stroke="url(#gradA1)" stroke-width="0.57" stroke-opacity="0.154" fill="none"/>
+    <path d="M -12.3,692.7 C 92.7,572.7 187.6,440.1 260.0,417.7 C 332.4,395.2 445.1,237.7 552.5,80.3" stroke="url(#gradA2)" stroke-width="0.59" stroke-opacity="0.166" fill="none"/>
+    <path d="M -9.8,694.4 C 94.4,574.4 188.7,441.6 260.0,419.4 C 331.3,397.3 445.8,240.2 552.9,83.1" stroke="url(#gradA1)" stroke-width="0.6" stroke-opacity="0.179" fill="none"/>
+    <path d="M -7.2,696.3 C 96.3,576.3 189.8,443.0 260.0,421.3 C 330.2,399.5 446.5,242.8 553.3,86.0" stroke="url(#gradA2)" stroke-width="0.62" stroke-opacity="0.192" fill="none"/>
+    <path d="M -4.6,698.1 C 98.1,578.1 190.9,444.5 260.0,423.1 C 329.1,401.8 447.3,245.4 553.6,89.0" stroke="url(#gradA1)" stroke-width="0.64" stroke-opacity="0.205" fill="none"/>
+    <path d="M -1.9,700.1 C 100.1,580.1 192.0,446.0 260.0,425.1 C 328.0,404.1 448.0,248.1 554.0,92.1" stroke="url(#gradA2)" stroke-width="0.66" stroke-opacity="0.219" fill="none"/>
+    <path d="M 0.8,702.0 C 102.0,582.0 193.2,447.6 260.0,427.0 C 326.8,406.4 448.8,250.8 554.4,95.2" stroke="url(#gradA1)" stroke-width="0.67" stroke-opacity="0.233" fill="none"/>
+    <path d="M 3.6,704.0 C 104.0,584.0 194.4,449.2 260.0,429.0 C 325.6,408.8 449.6,253.6 554.8,98.4" stroke="url(#gradA2)" stroke-width="0.7" stroke-opacity="0.248" fill="none"/>
+    <path d="M 6.4,706.0 C 106.0,586.0 195.6,450.8 260.0,431.0 C 324.4,411.2 450.4,256.4 555.2,101.6" stroke="url(#gradA1)" stroke-width="0.72" stroke-opacity="0.262" fill="none"/>
+    <path d="M 9.3,708.0 C 108.0,588.0 196.8,452.4 260.0,433.0 C 323.2,413.7 451.2,259.3 555.6,104.9" stroke="url(#gradA2)" stroke-width="0.74" stroke-opacity="0.277" fill="none"/>
+    <path d="M 12.2,710.1 C 110.1,590.1 198.1,454.1 260.0,435.1 C 321.9,416.1 452.0,262.2 556.0,108.2" stroke="url(#gradA1)" stroke-width="0.76" stroke-opacity="0.293" fill="none"/>
+    <path d="M 15.1,712.2 C 112.2,592.2 199.3,455.8 260.0,437.2 C 320.7,418.7 452.9,265.1 556.4,111.6" stroke="url(#gradA2)" stroke-width="0.78" stroke-opacity="0.308" fill="none"/>
+    <path d="M 18.1,714.4 C 114.4,594.4 200.6,457.5 260.0,439.4 C 319.4,421.2 453.7,268.1 556.9,115.0" stroke="url(#gradA1)" stroke-width="0.81" stroke-opacity="0.324" fill="none"/>
+    <path d="M 21.1,716.5 C 116.5,596.5 201.9,459.2 260.0,441.5 C 318.1,423.8 454.6,271.1 557.3,118.4" stroke="url(#gradA2)" stroke-width="0.83" stroke-opacity="0.34" fill="none"/>
+    <path d="M 24.2,718.7 C 118.7,598.7 203.2,461.0 260.0,443.7 C 316.8,426.4 455.5,274.2 557.7,121.9" stroke="url(#gradA1)" stroke-width="0.86" stroke-opacity="0.356" fill="none"/>
+    <path d="M 27.3,720.9 C 120.9,600.9 204.6,462.7 260.0,445.9 C 315.4,429.1 456.4,277.3 558.2,125.5" stroke="url(#gradA2)" stroke-width="0.89" stroke-opacity="0.372" fill="none"/>
+    <path d="M 30.4,723.2 C 123.2,603.2 205.9,464.5 260.0,448.2 C 314.1,431.8 457.3,280.4 558.6,129.0" stroke="url(#gradA1)" stroke-width="0.91" stroke-opacity="0.389" fill="none"/>
+    <path d="M 33.6,725.4 C 125.4,605.4 207.2,466.3 260.0,450.4 C 312.8,434.5 458.2,283.6 559.1,132.7" stroke="url(#gradA2)" stroke-width="0.94" stroke-opacity="0.406" fill="none"/>
+    <path d="M 36.8,727.7 C 127.7,607.7 208.6,468.2 260.0,452.7 C 311.4,437.2 459.1,286.8 559.5,136.3" stroke="url(#gradA1)" stroke-width="0.97" stroke-opacity="0.423" fill="none"/>
+    <path d="M 40.0,730.0 C 130.0,610.0 210.0,470.0 260.0,455.0 C 310.0,440.0 460.0,290.0 560.0,140.0" stroke="url(#gradA2)" stroke-width="1.0" stroke-opacity="0.44" fill="none"/>
+    <!-- Feathered Glow Spine A -->
+    <path d="M 40,730 C 130,610 210,470 260,455 C 310,440 460,290 560,140" stroke="url(#spineGradA)" stroke-width="2.6" stroke-opacity="0.28" stroke-linecap="round" filter="url(#spineGlow)" fill="none"/>
+    <path d="M 40,730 C 130,610 210,470 260,455 C 310,440 460,290 560,140" stroke="url(#spineGradA)" stroke-width="1.0" stroke-opacity="0.55" stroke-linecap="round" fill="none"/>
+  </g>
+
+  <!-- Descending Silk Wave Ribbon -->
+  <g id="ribbon-B">
+    <path d="M -30.0,80.0 C 80.0,160.0 180.0,230.0 260.0,235.0 C 340.0,240.0 440.0,420.0 550.0,620.0" stroke="url(#gradB1)" stroke-width="0.5" stroke-opacity="0.08" fill="none"/>
+    <path d="M -28.9,79.0 C 80.8,159.0 180.5,229.0 260.0,234.2 C 339.5,239.4 440.3,419.0 550.2,618.7" stroke="url(#gradB2)" stroke-width="0.5" stroke-opacity="0.085" fill="none"/>
+    <path d="M -27.3,77.7 C 81.9,157.7 181.2,227.7 260.0,233.1 C 338.8,238.5 440.8,417.7 550.4,616.9" stroke="url(#gradB1)" stroke-width="0.51" stroke-opacity="0.092" fill="none"/>
+    <path d="M -25.5,76.2 C 83.2,156.2 181.9,226.2 260.0,231.8 C 338.1,237.4 441.3,416.2 550.6,614.9" stroke="url(#gradB2)" stroke-width="0.51" stroke-opacity="0.101" fill="none"/>
+    <path d="M -23.6,74.5 C 84.6,154.5 182.8,224.5 260.0,230.4 C 337.2,236.3 441.8,414.5 550.9,612.6" stroke="url(#gradB1)" stroke-width="0.52" stroke-opacity="0.11" fill="none"/>
+    <path d="M -21.5,72.7 C 86.1,152.7 183.6,222.7 260.0,228.9 C 336.4,235.1 442.4,412.7 551.2,610.3" stroke="url(#gradB2)" stroke-width="0.53" stroke-opacity="0.12" fill="none"/>
+    <path d="M -19.3,70.8 C 87.6,150.8 184.6,220.8 260.0,227.4 C 335.4,233.9 443.1,410.8 551.5,607.8" stroke="url(#gradB1)" stroke-width="0.55" stroke-opacity="0.131" fill="none"/>
+    <path d="M -17.1,68.9 C 89.2,148.9 185.5,218.9 260.0,225.8 C 334.5,232.6 443.7,408.9 551.8,605.2" stroke="url(#gradB2)" stroke-width="0.56" stroke-opacity="0.142" fill="none"/>
+    <path d="M -14.7,66.9 C 90.9,146.9 186.6,216.9 260.0,224.1 C 333.4,231.3 444.4,406.9 552.2,602.5" stroke="url(#gradB1)" stroke-width="0.57" stroke-opacity="0.154" fill="none"/>
+    <path d="M -12.3,64.8 C 92.7,144.8 187.6,214.8 260.0,222.3 C 332.4,229.9 445.1,404.8 552.5,599.7" stroke="url(#gradB2)" stroke-width="0.59" stroke-opacity="0.166" fill="none"/>
+    <path d="M -9.8,62.7 C 94.4,142.7 188.7,212.7 260.0,220.6 C 331.3,228.4 445.8,402.7 552.9,596.9" stroke="url(#gradB1)" stroke-width="0.6" stroke-opacity="0.179" fill="none"/>
+    <path d="M -7.2,60.5 C 96.3,140.5 189.8,210.5 260.0,218.7 C 330.2,227.0 446.5,400.5 553.3,594.0" stroke="url(#gradB2)" stroke-width="0.62" stroke-opacity="0.192" fill="none"/>
+    <path d="M -4.6,58.2 C 98.1,138.2 190.9,208.2 260.0,216.9 C 329.1,225.5 447.3,398.2 553.6,591.0" stroke="url(#gradB1)" stroke-width="0.64" stroke-opacity="0.205" fill="none"/>
+    <path d="M -1.9,55.9 C 100.1,135.9 192.0,205.9 260.0,214.9 C 328.0,224.0 448.0,395.9 554.0,587.9" stroke="url(#gradB2)" stroke-width="0.66" stroke-opacity="0.219" fill="none"/>
+    <path d="M 0.8,53.6 C 102.0,133.6 193.2,203.6 260.0,213.0 C 326.8,222.4 448.8,393.6 554.4,584.8" stroke="url(#gradB1)" stroke-width="0.67" stroke-opacity="0.233" fill="none"/>
+    <path d="M 3.6,51.2 C 104.0,131.2 194.4,201.2 260.0,211.0 C 325.6,220.8 449.6,391.2 554.8,581.6" stroke="url(#gradB2)" stroke-width="0.7" stroke-opacity="0.248" fill="none"/>
+    <path d="M 6.4,48.8 C 106.0,128.8 195.6,198.8 260.0,209.0 C 324.4,219.2 450.4,388.8 555.2,578.4" stroke="url(#gradB1)" stroke-width="0.72" stroke-opacity="0.262" fill="none"/>
+    <path d="M 9.3,46.3 C 108.0,126.3 196.8,196.3 260.0,207.0 C 323.2,217.6 451.2,386.3 555.6,575.1" stroke="url(#gradB2)" stroke-width="0.74" stroke-opacity="0.277" fill="none"/>
+    <path d="M 12.2,43.9 C 110.1,123.9 198.1,193.9 260.0,204.9 C 321.9,215.9 452.0,383.9 556.0,571.8" stroke="url(#gradB1)" stroke-width="0.76" stroke-opacity="0.293" fill="none"/>
+    <path d="M 15.1,41.3 C 112.2,121.3 199.3,191.3 260.0,202.8 C 320.7,214.2 452.9,381.3 556.4,568.4" stroke="url(#gradB2)" stroke-width="0.78" stroke-opacity="0.308" fill="none"/>
+    <path d="M 18.1,38.8 C 114.4,118.8 200.6,188.8 260.0,200.6 C 319.4,212.5 453.7,378.8 556.9,565.0" stroke="url(#gradB1)" stroke-width="0.81" stroke-opacity="0.324" fill="none"/>
+    <path d="M 21.1,36.2 C 116.5,116.2 201.9,186.2 260.0,198.5 C 318.1,210.8 454.6,376.2 557.3,561.6" stroke="url(#gradB2)" stroke-width="0.83" stroke-opacity="0.34" fill="none"/>
+    <path d="M 24.2,33.6 C 118.7,113.6 203.2,183.6 260.0,196.3 C 316.8,209.0 455.5,373.6 557.7,558.1" stroke="url(#gradB1)" stroke-width="0.86" stroke-opacity="0.356" fill="none"/>
+    <path d="M 27.3,30.9 C 120.9,110.9 204.6,180.9 260.0,194.1 C 315.4,207.3 456.4,370.9 558.2,554.5" stroke="url(#gradB2)" stroke-width="0.89" stroke-opacity="0.372" fill="none"/>
+    <path d="M 30.4,28.2 C 123.2,108.2 205.9,178.2 260.0,191.8 C 314.1,205.5 457.3,368.2 558.6,551.0" stroke="url(#gradB1)" stroke-width="0.91" stroke-opacity="0.389" fill="none"/>
+    <path d="M 33.6,25.5 C 125.4,105.5 207.2,175.5 260.0,189.6 C 312.8,203.7 458.2,365.5 559.1,547.3" stroke="url(#gradB2)" stroke-width="0.94" stroke-opacity="0.406" fill="none"/>
+    <path d="M 36.8,22.8 C 127.7,102.8 208.6,172.8 260.0,187.3 C 311.4,201.8 459.1,362.8 559.5,543.7" stroke="url(#gradB1)" stroke-width="0.97" stroke-opacity="0.423" fill="none"/>
+    <path d="M 40.0,20.0 C 130.0,100.0 210.0,170.0 260.0,185.0 C 310.0,200.0 460.0,360.0 560.0,540.0" stroke="url(#gradB2)" stroke-width="1.0" stroke-opacity="0.44" fill="none"/>
+    <!-- Feathered Glow Spine B -->
+    <path d="M 40,20 C 130,100 210,170 260,185 C 310,200 460,360 560,540" stroke="url(#spineGradB)" stroke-width="2.6" stroke-opacity="0.28" stroke-linecap="round" filter="url(#spineGlow)" fill="none"/>
+    <path d="M 40,20 C 130,100 210,170 260,185 C 310,200 460,360 560,540" stroke="url(#spineGradB)" stroke-width="1.0" stroke-opacity="0.55" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>

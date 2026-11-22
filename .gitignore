@@ -68,6 +68,7 @@ desktop/dist/
 desktop/out/
 desktop/coverage/
 desktop/.nyc_output/
+desktop/.bump-stamp
 
 # Logs
 *.log

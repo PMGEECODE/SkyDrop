@@ -208,6 +208,12 @@ func (pr *PeerResolver) DiscoverPeers(ctx context.Context, timeout time.Duration
 		}
 
 		pr.mu.Lock()
+		// Deduplicate any older peer entry advertising on the exact same host & port
+		for existingID, p := range pr.peers {
+			if existingID != peerID && p.Host == peer.Host && p.Port == peer.Port {
+				delete(pr.peers, existingID)
+			}
+		}
 		pr.peers[peerID] = peer
 		pr.mu.Unlock()
 	}
@@ -225,16 +231,36 @@ func (pr *PeerResolver) AddCachedPeer(peer DiscoveredPeer) {
 	pr.peers[peer.ID] = peer
 }
 
-// GetCachedPeers returns a snapshot of currently cached peers.
-func (pr *PeerResolver) GetCachedPeers() []DiscoveredPeer {
-	pr.mu.RLock()
-	defer pr.mu.RUnlock()
+// PeerStaleThreshold is the duration after which an unrefreshed mDNS peer is considered stale.
+const PeerStaleThreshold = 60 * time.Second
 
-	result := make([]DiscoveredPeer, 0, len(pr.peers))
+// GetCachedPeers returns a snapshot of currently cached peers, pruning stale records and deduplicating endpoints.
+func (pr *PeerResolver) GetCachedPeers() []DiscoveredPeer {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
+	now := time.Now().UTC()
+	// Prune stale peers older than threshold
+	for id, p := range pr.peers {
+		if !p.LastSeen.IsZero() && now.Sub(p.LastSeen) > PeerStaleThreshold {
+			delete(pr.peers, id)
+		}
+	}
+
+	// Deduplicate by host:port endpoint keeping the newest entry
+	endpointMap := make(map[string]DiscoveredPeer)
 	for _, p := range pr.peers {
 		if !pr.isSelfLocked(p) {
-			result = append(result, p)
+			key := fmt.Sprintf("%s:%d", p.Host, p.Port)
+			if existing, exists := endpointMap[key]; !exists || p.LastSeen.After(existing.LastSeen) {
+				endpointMap[key] = p
+			}
 		}
+	}
+
+	result := make([]DiscoveredPeer, 0, len(endpointMap))
+	for _, p := range endpointMap {
+		result = append(result, p)
 	}
 	return result
 }

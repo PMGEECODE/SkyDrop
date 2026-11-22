@@ -5,15 +5,20 @@
   --color-primary: #0EA5E9;
   --color-primary-hover: #0284C7;
   --color-primary-rgb: 14, 165, 233;
+  --color-primary-bg: rgba(14, 165, 233, 0.12);
   --color-accent: #F59E0B;
   --color-success: #10B981;
   --color-success-bg: rgba(16, 185, 129, 0.12);
   --color-danger: #EF4444;
   --color-danger-bg: rgba(239, 68, 68, 0.12);
 
+  /* Radius Design System Tokens */
+  --radius-xs: 4px;
   --radius-sm: 6px;
+  --radius-window: 8px;
   --radius-md: 10px;
   --radius-lg: 14px;
+  --radius-pill: 20px;
   --radius-full: 9999px;
   --transition-fast: 150ms ease;
   --transition-normal: 220ms ease;
@@ -41,6 +46,16 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
+
+  /* Navigation Bar Frosted Glass Theme Tokens */
+  --bg-tab-bar: rgba(18, 22, 34, 0.72);
+  --border-tab-bar: rgba(255, 255, 255, 0.10);
+  --shadow-tab-bar: 0 8px 32px rgba(0, 0, 0, 0.40);
+  --tab-indicator-shadow: 0 2px 10px rgba(14, 165, 233, 0.75);
+
+  /* Subtle Ambient Wave Background */
+  --bg-wave-url: url('../assets/wave-bg-dark.svg');
+  --wave-bg-opacity: 0.38;
 }
 
 /* Light Theme */
@@ -61,4 +76,14 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.12);
+
+  /* Navigation Bar Frosted Glass Theme Tokens */
+  --bg-tab-bar: rgba(255, 255, 255, 0.88);
+  --border-tab-bar: rgba(0, 0, 0, 0.08);
+  --shadow-tab-bar: 0 8px 28px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --tab-indicator-shadow: 0 2px 8px rgba(14, 165, 233, 0.4);
+
+  /* Subtle Ambient Wave Background */
+  --bg-wave-url: url('../assets/wave-bg-light.svg');
+  --wave-bg-opacity: 0.28;
 }

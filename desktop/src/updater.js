@@ -40,7 +40,7 @@ class Updater {
     this.app = options.app || null;
     this.repoOwner = options.repoOwner || DEFAULT_REPO_OWNER;
     this.repoName = options.repoName || DEFAULT_REPO_NAME;
-    this.configDir = options.configDir || (this.app ? this.app.getPath('userData') : path.join(os.homedir(), '.config', 'skydrop'));
+    this.configDir = options.configDir || ((this.app && typeof this.app.getPath === 'function') ? this.app.getPath('userData') : path.join(os.homedir(), '.config', 'skydrop'));
     this.settingsFilePath = options.settingsFilePath || path.join(this.configDir, 'desktop-settings.json');
     this.customAppVersion = options.currentVersion || null;
     this.customInstallType = options.installType || null;
@@ -50,6 +50,10 @@ class Updater {
   getInstallationType() {
     if (this.customInstallType) {
       return this.customInstallType;
+    }
+    // On Windows, package type is Windows Installer executable (.exe)
+    if (process.platform === 'win32') {
+      return 'exe';
     }
     // If APPIMAGE environment variable is present, we are running as an AppImage
     if (process.env.APPIMAGE) {
@@ -241,14 +245,17 @@ class Updater {
 
       const isNewer = compareVersions(latestTag, currentVersion) > 0;
 
-      // Select matching asset based on host installation type (AppImage vs deb)
+      // Select matching asset based on host installation type (AppImage vs deb vs exe)
       const installType = this.getInstallationType();
       const assets = latestRelease.assets || [];
       const appImageAsset = assets.find((a) => a.name.toLowerCase().endsWith('.appimage'));
       const debAsset = assets.find((a) => a.name.toLowerCase().endsWith('.deb'));
-      const targetAsset = installType === 'deb'
-        ? (debAsset || appImageAsset || null)
-        : (appImageAsset || debAsset || null);
+      const exeAsset = assets.find((a) => a.name.toLowerCase().endsWith('.exe'));
+      const targetAsset = installType === 'exe'
+        ? (exeAsset || null)
+        : (installType === 'deb'
+          ? (debAsset || appImageAsset || null)
+          : (appImageAsset || debAsset || null));
 
       // Locate checksums file (e.g. SHA256SUMS.txt, or asset.sha256)
       const checksumAsset = assets.find((a) => {
@@ -385,6 +392,28 @@ class Updater {
 
       // Set executable permission
       fs.chmodSync(tempFile, 0o755);
+
+      // Handle Windows installer execution
+      if (asset.name.toLowerCase().endsWith('.exe')) {
+        console.log(`[Updater] Executing Windows installer: ${tempFile}`);
+        const { spawn } = require('child_process');
+        try {
+          const child = spawn(tempFile, ['/S'], { detached: true, stdio: 'ignore' });
+          child.unref();
+          return {
+            ok: true,
+            readyToRestart: true,
+            installedVersion: latestVersion,
+            targetPath: tempFile
+          };
+        } catch (winErr) {
+          console.error('[Updater] Failed to launch Windows installer:', winErr.message);
+          return {
+            ok: false,
+            error: `Failed to launch installer: ${winErr.message}`
+          };
+        }
+      }
 
       // Handle Debian package installation
       if (asset.name.toLowerCase().endsWith('.deb')) {

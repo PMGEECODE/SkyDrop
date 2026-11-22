@@ -42,6 +42,7 @@ class Lightbox {
               <button id="lightbox-zoom-reset" class="lightbox-btn" title="Reset Zoom (0)">100%</button>
               <button id="lightbox-zoom-in" class="lightbox-btn" title="Zoom In (+)">+</button>
             </div>
+            <button id="lightbox-open-external" class="lightbox-btn" title="Open in external player"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></button>
             <button id="lightbox-close" class="lightbox-btn lightbox-btn-close" title="Close (Esc)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
           </div>
         </div>
@@ -60,10 +61,20 @@ class Lightbox {
     this.nextBtn = el.querySelector('#lightbox-next');
     this.closeBtn = el.querySelector('#lightbox-close');
     this.zoomControls = el.querySelector('#lightbox-zoom-controls');
+    this.openExternalBtn = el.querySelector('#lightbox-open-external');
 
     this.prevBtn.addEventListener('click', () => this.prev());
     this.nextBtn.addEventListener('click', () => this.next());
     this.closeBtn.addEventListener('click', () => this.close());
+
+    if (this.openExternalBtn) {
+      this.openExternalBtn.addEventListener('click', () => {
+        const item = this.items[this.currentIndex];
+        if (item && item.saved_path && window.skydrop && window.skydrop.openPath) {
+          window.skydrop.openPath(item.saved_path);
+        }
+      });
+    }
 
     el.querySelector('#lightbox-zoom-in').addEventListener('click', () => this.setZoom(this.zoomLevel + 0.3));
     el.querySelector('#lightbox-zoom-out').addEventListener('click', () => this.setZoom(this.zoomLevel - 0.3));
@@ -150,14 +161,38 @@ class Lightbox {
     const isVid = item.isVideo || pres.isVideo;
     const isAud = item.isAudio || pres.isAudio;
 
+    const renderFallback = (message) => {
+      this.mediaContainer.innerHTML = `
+        <div class="media-fallback-card" style="background: var(--bg-surface); padding: 36px 40px; border-radius: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; align-items: center; gap: 14px; box-shadow: var(--shadow-lg); text-align: center; max-width: 440px; margin: auto;">
+          <div style="font-size: 38px;">⚠️</div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--text-main);">Cannot Play This Format</div>
+          <div style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">${message || 'The format or codec cannot be rendered in-app. You can open it in your system media player.'}</div>
+          <button id="lightbox-fallback-btn" class="btn-primary" style="margin-top: 8px; padding: 10px 20px; font-size: 13px; border-radius: 8px; cursor: pointer;">Open in Default Player</button>
+        </div>
+      `;
+      const btn = this.mediaContainer.querySelector('#lightbox-fallback-btn');
+      if (btn) {
+        btn.addEventListener('click', () => {
+          if (item && item.saved_path && window.skydrop && window.skydrop.openPath) {
+            window.skydrop.openPath(item.saved_path);
+          }
+        });
+      }
+    };
+
     if (isVid) {
       this.zoomControls.style.display = 'none';
       this.mediaContainer.innerHTML = `
         <video id="lightbox-video" class="lightbox-video" controls autoplay playsinline style="max-width: 90vw; max-height: 80vh; border-radius: 8px; outline: none; box-shadow: var(--shadow-lg);">
           <source src="${mediaUrl}">
-          Your system cannot play this video codec.
         </video>
       `;
+      const vid = this.mediaContainer.querySelector('#lightbox-video');
+      if (vid) {
+        vid.addEventListener('error', () => {
+          renderFallback('Video codec or format is not supported by the in-app player.');
+        });
+      }
     } else if (isAud) {
       this.zoomControls.style.display = 'none';
       this.mediaContainer.innerHTML = `
@@ -169,12 +204,17 @@ class Lightbox {
             <div style="font-size: 14px; font-weight: 700; color: var(--text-main); margin-bottom: 4px; word-break: break-all;">${item.filename}</div>
             <div style="font-size: 11px; color: var(--text-muted);">${typeof formatBytes === 'function' ? formatBytes(item.size || 0) : ''}</div>
           </div>
-          <audio controls autoplay style="width: 100%; max-width: 280px; margin-top: 8px; outline: none;">
+          <audio id="lightbox-audio" controls autoplay style="width: 100%; max-width: 280px; margin-top: 8px; outline: none;">
             <source src="${mediaUrl}">
-            Your system cannot play this audio format.
           </audio>
         </div>
       `;
+      const aud = this.mediaContainer.querySelector('#lightbox-audio');
+      if (aud) {
+        aud.addEventListener('error', () => {
+          renderFallback('Audio format is not supported by the in-app player.');
+        });
+      }
     } else {
       this.zoomControls.style.display = 'flex';
       this.mediaContainer.innerHTML = `
@@ -215,24 +255,37 @@ class Lightbox {
   }
 
   handleKeyDown(e) {
+    const vid = this.mediaContainer.querySelector('video');
+    const aud = this.mediaContainer.querySelector('audio');
+    const media = vid || aud;
+
     if (e.key === 'Escape') {
       this.close();
     } else if (e.key === 'ArrowLeft') {
-      this.prev();
+      if (media && !e.shiftKey) {
+        e.preventDefault();
+        media.currentTime = Math.max(0, media.currentTime - 10);
+      } else {
+        this.prev();
+      }
     } else if (e.key === 'ArrowRight') {
-      this.next();
+      if (media && !e.shiftKey) {
+        e.preventDefault();
+        media.currentTime = Math.min(media.duration || 0, media.currentTime + 10);
+      } else {
+        this.next();
+      }
     } else if (e.key === '+' || e.key === '=') {
       this.setZoom(this.zoomLevel + 0.3);
     } else if (e.key === '-') {
       this.setZoom(this.zoomLevel - 0.3);
     } else if (e.key === '0') {
       this.setZoom(1.0);
-    } else if (e.key === ' ' && this.items[this.currentIndex]?.isVideo) {
-      const vid = this.mediaContainer.querySelector('video');
-      if (vid) {
+    } else if (e.key === ' ' || e.key === 'Enter') {
+      if (media) {
         e.preventDefault();
-        if (vid.paused) vid.play();
-        else vid.pause();
+        if (media.paused) media.play();
+        else media.pause();
       }
     }
   }
