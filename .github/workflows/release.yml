@@ -207,7 +207,7 @@ jobs:
           if [ -z "$CLEAN_VERSION" ]; then
             CLEAN_VERSION=$(node -p "require('./package.json').version")
           fi
-          RELEASE_TAG="desktop-v${CLEAN_VERSION}"
+          RELEASE_TAG="v${CLEAN_VERSION}"
           RELEASE_TITLE="SkyDrop v${CLEAN_VERSION}"
 
           echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
@@ -224,8 +224,8 @@ jobs:
             cat RELEASE_NOTES.md > release_body.md
           else
             echo "Generating release notes from git commit log..."
-            # Find the previous desktop tag
-            PREV_TAG=$(git tag -l "desktop-v*" --sort=-v:refname | grep -v "^${RELEASE_TAG}$" | grep -v "^desktop-v${CLEAN_VERSION}$" | head -n 1 || true)
+            # Find the previous release tag (supports both v* and desktop-v*)
+            PREV_TAG=$(git tag -l "desktop-v*" "v*" --sort=-v:refname | grep -v "^${RAW_TAG}$" | grep -v "^v${CLEAN_VERSION}$" | grep -v "^desktop-v${CLEAN_VERSION}$" | head -n 1 || true)
             
             COMMITS=""
             if [ -n "$PREV_TAG" ]; then
