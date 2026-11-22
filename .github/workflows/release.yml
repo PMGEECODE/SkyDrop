@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 env:
-  RELEASES_REPO: 'PMGEECODE/skydrop-release'
+  RELEASES_REPO: ${{ vars.RELEASES_REPO || 'PMGEECODE/skydrop-release' }}
 
 jobs:
   build-linux:
@@ -82,7 +82,7 @@ jobs:
       - name: Package Linux assets (deb & AppImage)
         env:
           NO_BUMP: '1'
-        run: npx electron-builder --linux AppImage deb
+        run: npx electron-builder --linux AppImage deb --publish never
 
       - name: Upload Linux build artifacts
         uses: actions/upload-artifact@v4
@@ -150,7 +150,7 @@ jobs:
       - name: Package Windows installer (NSIS)
         env:
           NO_BUMP: '1'
-        run: npx electron-builder --win nsis:x64
+        run: npx electron-builder --win nsis:x64 --publish never
 
       - name: Upload Windows build artifacts
         uses: actions/upload-artifact@v4

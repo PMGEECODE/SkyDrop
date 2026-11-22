@@ -30,6 +30,8 @@ Thumbs.db
 # ------------------------------------------
 /build/
 **/build/
+!desktop/build/
+!desktop/build/**
 /bin/
 **/bin/
 *.exe
