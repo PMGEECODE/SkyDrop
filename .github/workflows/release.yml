@@ -223,7 +223,7 @@ jobs:
             echo "Using desktop/RELEASE_NOTES.md for release body"
             cat RELEASE_NOTES.md > release_body.md
           else
-            echo "Generating release notes from git commit log..."
+            echo "Generating clean release notes from git commit log..."
             # Find the previous release tag (supports both v* and desktop-v*)
             PREV_TAG=$(git tag -l "desktop-v*" "v*" --sort=-v:refname | grep -v "^${RAW_TAG}$" | grep -v "^v${CLEAN_VERSION}$" | grep -v "^desktop-v${CLEAN_VERSION}$" | head -n 1 || true)
             
@@ -234,25 +234,33 @@ jobs:
             fi
 
             if [ -z "$COMMITS" ]; then
-              echo "Extracting last 20 desktop commits..."
-              COMMITS=$(git log -n 20 --oneline -- . || true)
+              echo "Extracting recent desktop commits..."
+              COMMITS=$(git log -n 15 --oneline -- . || true)
             fi
 
-            # Format bullet points
-            NOTES_LIST=$(echo "$COMMITS" | sed -E 's/^[a-f0-9]+ /- /' | grep -v '^[[:space:]]*$' || echo "- Maintenance updates and stability improvements.")
+            # Clean and filter commit messages (exclude internal chores, CI fixes, merge commits, noise)
+            NOTES_LIST=$(echo "$COMMITS" | sed -E 's/^[a-f0-9]+ //' | grep -vE '^(chore|ci|test|merge|updates?$|skydrop$)' | sed -E 's/^[a-z]+(\([^\)]+\))?:\s*//' | awk '{print toupper(substr($0,1,1)) substr($0,2)}' | sed 's/^/- /' || true)
+
+            if [ -z "$NOTES_LIST" ]; then
+              NOTES_LIST="- Performance optimizations, security enhancements, and stability improvements."
+            fi
 
             {
               echo "## What's new"
               echo "$NOTES_LIST"
-              echo ""
-              echo "## Downloads"
-              echo "- **Debian / Ubuntu Package**: \`${DEB_FILE}\`"
-              echo "- **Linux Standalone (AppImage)**: \`${APPIMAGE_FILE}\`"
-              echo "- **Windows Setup Installer**: \`${EXE_FILE}\`"
-              echo ""
-              echo "Please verify all downloads against the included \`sha256sums.txt\` checksums file."
             } > release_body.md
           fi
+
+          # Always append Downloads section and verification instruction
+          {
+            echo ""
+            echo "## Downloads"
+            echo "- **Debian / Ubuntu Package**: \`${DEB_FILE}\`"
+            echo "- **Linux Standalone (AppImage)**: \`${APPIMAGE_FILE}\`"
+            echo "- **Windows Setup Installer**: \`${EXE_FILE}\`"
+            echo ""
+            echo "Please verify all downloads against the included \`sha256sums.txt\` checksums file."
+          } >> release_body.md
 
           echo "Final Release Notes:"
           cat release_body.md
