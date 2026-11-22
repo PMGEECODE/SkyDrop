@@ -1,7 +1,7 @@
-## What's New in v1.0.40
+## What's New in v1.0.41
 
 ### 🪟 Windows Desktop Support & NSIS Installer
-- **Official 64-bit Windows Installer**: Added `skydrop-1.0.40-win-x64-setup.exe` (NSIS installer) featuring Desktop shortcut, Start Menu integration, and clean uninstaller support.
+- **Official 64-bit Windows Installer**: Added `skydrop-1.0.41-win-x64-setup.exe` (NSIS installer) featuring Desktop shortcut, Start Menu integration, and clean uninstaller support.
 - **Headless Background Go Daemon**: Cross-compiled `skydrop-daemon.exe` with GUI subsystem flags (`-H windowsgui`) for background file transfers without console window popups.
 - **Windows Autostart Integration**: Integrated native Windows user login startup via Electron's `setLoginItemSettings()`.
 - **In-App Updater**: Automated background update checks, SHA-256 integrity verification, and silent installer updates directly from the app.
