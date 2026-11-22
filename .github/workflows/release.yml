@@ -54,8 +54,12 @@ jobs:
       - name: Validate version matches tag
         run: |
           RAW_TAG="${{ github.ref_name }}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag_name }}" ]; then
-            RAW_TAG="${{ inputs.tag_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.tag_name }}" ]; then
+              RAW_TAG="${{ inputs.tag_name }}"
+            else
+              RAW_TAG="desktop-v$(node -p "require('./package.json').version")"
+            fi
           fi
           CLEAN_VERSION=$(echo "$RAW_TAG" | sed -E 's/^(desktop-)?v//')
           PKG_VERSION=$(node -p "require('./package.json').version")
@@ -118,8 +122,12 @@ jobs:
         shell: bash
         run: |
           RAW_TAG="${{ github.ref_name }}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag_name }}" ]; then
-            RAW_TAG="${{ inputs.tag_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.tag_name }}" ]; then
+              RAW_TAG="${{ inputs.tag_name }}"
+            else
+              RAW_TAG="desktop-v$(node -p "require('./package.json').version")"
+            fi
           fi
           CLEAN_VERSION=$(echo "$RAW_TAG" | sed -E 's/^(desktop-)?v//')
           PKG_VERSION=$(node -p "require('./package.json').version")

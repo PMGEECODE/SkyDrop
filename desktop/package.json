@@ -1,6 +1,6 @@
 {
   "name": "skydrop-desktop",
-  "version": "1.0.39",
+  "version": "1.0.40",
   "description": "SkyDrop - Fast, private local file drop for Linux and mobile",
   "homepage": "https://github.com/PMGEECODE/skydrop",
   "author": {
@@ -65,8 +65,7 @@
       "artifactName": "skydrop-${version}-linux-${arch}.${ext}"
     },
     "deb": {
-      "afterInstall": "build/debian/after-install.sh",
-      "artifactName": "skydrop-${version}-linux-amd64.deb"
+      "afterInstall": "build/debian/after-install.sh"
     },
     "appImage": {
       "artifactName": "skydrop-${version}-linux-x86_64.AppImage"
@@ -100,9 +99,6 @@
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
       "uninstallDisplayName": "${productName}"
-    },
-    "deb": {
-      "afterInstall": "build/debian/after-install.sh"
     },
     "extraResources": [
       {
