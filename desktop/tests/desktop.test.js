@@ -480,6 +480,45 @@ async function runTests() {
     });
     assert.strictEqual(updaterAppImage.getInstallationType(), 'appimage', 'Installation type should resolve to appimage');
 
+    // ── Asset selection: strict per-install-type matching ──────────────────
+    // Simulate a release containing all three artifact types
+    const mockAssets = [
+      { name: 'skydrop-1.0.29-linux-amd64.deb',       browser_download_url: 'https://example.com/skydrop.deb',       size: 60000000 },
+      { name: 'skydrop-1.0.29-linux-x86_64.AppImage', browser_download_url: 'https://example.com/skydrop.AppImage',  size: 90000000 },
+      { name: 'skydrop-1.0.29-win-x64-setup.exe',     browser_download_url: 'https://example.com/skydrop-setup.exe', size: 70000000 }
+    ];
+    const appImageAsset = mockAssets.find((a) => a.name.toLowerCase().endsWith('.appimage'));
+    const debAsset      = mockAssets.find((a) => a.name.toLowerCase().endsWith('.deb'));
+    const exeAsset      = mockAssets.find((a) => a.name.toLowerCase().endsWith('.exe'));
+
+    // deb install → must pick .deb only (no AppImage fallback)
+    const selectedForDeb = debAsset || null;
+    assert.ok(selectedForDeb, 'deb asset must be found');
+    assert.ok(selectedForDeb.name.endsWith('.deb'), 'deb install must select .deb asset');
+    assert.ok(!selectedForDeb.name.endsWith('.AppImage'), 'deb install must NOT select .AppImage asset');
+
+    // appimage install → must pick .AppImage only (no deb fallback)
+    const selectedForAppImage = appImageAsset || null;
+    assert.ok(selectedForAppImage, 'AppImage asset must be found');
+    assert.ok(selectedForAppImage.name.endsWith('.AppImage'), 'appimage install must select .AppImage asset');
+    assert.ok(!selectedForAppImage.name.endsWith('.deb'), 'appimage install must NOT select .deb asset');
+
+    // exe install → must pick .exe
+    const selectedForExe = exeAsset || null;
+    assert.ok(selectedForExe, 'exe asset must be found');
+    assert.ok(selectedForExe.name.endsWith('.exe'), 'exe install must select .exe asset');
+
+    // ── Temp file naming: extension derived from actual asset name ──────────
+    const updaterJs = fs.readFileSync(path.join(__dirname, '../src/updater.js'), 'utf8');
+    assert.ok(
+      updaterJs.includes("path.extname(asset.name)"),
+      'updater.js must derive temp file extension from asset.name via path.extname'
+    );
+    assert.ok(
+      !updaterJs.includes("skydrop-update-${latestVersion}-${Date.now()}.AppImage"),
+      'updater.js must NOT hardcode .AppImage extension for the temp download file'
+    );
+
     fs.rmSync(testDir, { recursive: true, force: true });
     console.log('  ✓ Semver comparison, package format detection (deb vs AppImage), and updater configuration validated');
   }

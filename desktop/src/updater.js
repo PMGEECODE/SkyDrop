@@ -251,11 +251,14 @@ class Updater {
       const appImageAsset = assets.find((a) => a.name.toLowerCase().endsWith('.appimage'));
       const debAsset = assets.find((a) => a.name.toLowerCase().endsWith('.deb'));
       const exeAsset = assets.find((a) => a.name.toLowerCase().endsWith('.exe'));
+      // Strict asset selection: each install type picks exactly its own artifact.
+      // A deb install never receives an AppImage (and vice versa) because they use
+      // completely different install paths and cannot substitute for each other.
       const targetAsset = installType === 'exe'
         ? (exeAsset || null)
         : (installType === 'deb'
-          ? (debAsset || appImageAsset || null)
-          : (appImageAsset || debAsset || null));
+          ? (debAsset || null)
+          : (appImageAsset || null));
 
       // Locate checksums file (e.g. SHA256SUMS.txt, or asset.sha256)
       const checksumAsset = assets.find((a) => {
@@ -311,7 +314,12 @@ class Updater {
 
     const { asset, latestVersion, checksumAsset } = this.pendingUpdate;
     const tempDir = os.tmpdir();
-    const tempFile = path.join(tempDir, `skydrop-update-${latestVersion}-${Date.now()}.AppImage`);
+
+    // Derive the correct file extension from the actual asset name so that
+    // dpkg, AppImage replacement, and the Windows NSIS runner each receive a
+    // file whose extension matches what they expect.
+    const assetExt = path.extname(asset.name).toLowerCase() || '.tmp';
+    const tempFile = path.join(tempDir, `skydrop-update-${latestVersion}-${Date.now()}${assetExt}`);
 
     console.log(`[Updater] Downloading asset ${asset.name} from ${asset.downloadUrl}...`);
 
