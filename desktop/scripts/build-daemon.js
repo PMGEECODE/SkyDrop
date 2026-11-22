@@ -10,7 +10,7 @@ const binDir = path.resolve(__dirname, '../bin');
 // Ensure output directory exists
 fs.mkdirSync(binDir, { recursive: true });
 
-const isWinRequested = process.argv.includes('--win') || process.argv.includes('--windows') || process.env.TARGET_OS === 'windows';
+const isWinRequested = process.argv.includes('--win') || process.argv.includes('--windows') || process.env.TARGET_OS === 'windows' || process.platform === 'win32';
 const isAllRequested = process.argv.includes('--all');
 
 function buildTarget(targetOS) {

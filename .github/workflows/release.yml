@@ -1,27 +1,42 @@
-name: Release SkyDrop
+name: Release SkyDrop Desktop
 
 on:
   push:
     tags:
+      - 'desktop-v*'
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag or version to release (e.g. desktop-v1.1.0 or 1.1.0)'
+        required: false
+        type: string
+        default: ''
+      dry_run:
+        description: 'Dry run: build, package, and verify without publishing to public repo'
+        required: false
+        type: boolean
+        default: false
 
+# Restrict default GITHUB_TOKEN permissions (least privilege)
 permissions:
-  contents: write
+  contents: read
+
+env:
+  RELEASES_REPO: 'PMGEECODE/skydrop-release'
 
 jobs:
-  release:
-    name: Build & Release Linux Assets
-    runs-on: ubuntu-22.04
-
+  build-linux:
+    name: Build Linux Packages (deb & AppImage)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
-          cache-dependency-path: daemon/go.sum
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -30,40 +45,233 @@ jobs:
           cache: 'npm'
           cache-dependency-path: desktop/package-lock.json
 
-      - name: Install Desktop Dependencies
-        run: |
-          cd desktop
-          npm ci
-
-      - name: Build Go Daemon
-        run: |
-          cd desktop
-          npm run build:daemon
-
-      - name: Build AppImage and Debian Packages
-        run: |
-          cd desktop
-          npm run dist:all
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate Checksums
-        run: |
-          cd desktop/dist
-          sha256sum *.AppImage *.deb > SHA256SUMS.txt
-          cat SHA256SUMS.txt
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          repository: PMGEECODE/skydrop-release
-          files: |
+          go-version: '1.22'
+          check-latest: false
+
+      - name: Validate version matches tag
+        run: |
+          RAW_TAG="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag_name }}" ]; then
+            RAW_TAG="${{ inputs.tag_name }}"
+          fi
+          CLEAN_VERSION=$(echo "$RAW_TAG" | sed -E 's/^(desktop-)?v//')
+          PKG_VERSION=$(node -p "require('./package.json').version")
+
+          echo "Target tag: $RAW_TAG (parsed version: $CLEAN_VERSION)"
+          echo "desktop/package.json version: $PKG_VERSION"
+
+          if [ -n "$CLEAN_VERSION" ] && [ "$CLEAN_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version ($CLEAN_VERSION) does not match desktop/package.json version ($PKG_VERSION)!"
+            exit 1
+          fi
+          echo "✓ Version verification passed: $PKG_VERSION"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Go daemon for Linux
+        run: node scripts/build-daemon.js
+
+      - name: Package Linux assets (deb & AppImage)
+        env:
+          NO_BUMP: '1'
+        run: npx electron-builder --linux AppImage deb
+
+      - name: Upload Linux build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: |
             desktop/dist/*.AppImage
             desktop/dist/*.deb
-            desktop/dist/SHA256SUMS.txt
-            desktop/dist/latest-linux.yml
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows Package (NSIS .exe)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: false
+
+      - name: Validate version matches tag
+        shell: bash
+        run: |
+          RAW_TAG="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag_name }}" ]; then
+            RAW_TAG="${{ inputs.tag_name }}"
+          fi
+          CLEAN_VERSION=$(echo "$RAW_TAG" | sed -E 's/^(desktop-)?v//')
+          PKG_VERSION=$(node -p "require('./package.json').version")
+
+          echo "Target tag: $RAW_TAG (parsed version: $CLEAN_VERSION)"
+          echo "desktop/package.json version: $PKG_VERSION"
+
+          if [ -n "$CLEAN_VERSION" ] && [ "$CLEAN_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version ($CLEAN_VERSION) does not match desktop/package.json version ($PKG_VERSION)!"
+            exit 1
+          fi
+          echo "✓ Version verification passed: $PKG_VERSION"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Go daemon for Windows
+        run: node scripts/build-daemon.js --win
+
+      - name: Package Windows installer (NSIS)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NO_BUMP: '1'
+        run: npx electron-builder --win nsis:x64
+
+      - name: Upload Windows build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: desktop/dist/*.exe
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish Release to Public Repository
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create staging directory and download artifacts
+        run: |
+          mkdir -p staging
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-artifacts
+          path: desktop/staging
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
+          path: desktop/staging
+
+      - name: Inspect staged artifacts and generate SHA-256 checksums
+        run: |
+          cd staging
+          ls -la
+          # Compute checksums across all distribution binaries (deb, AppImage, exe)
+          sha256sum *.deb *.AppImage *.exe > sha256sums.txt
+          echo "Generated sha256sums.txt:"
+          cat sha256sums.txt
+
+      - name: Build release notes and metadata
+        run: |
+          RAW_TAG="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag_name }}" ]; then
+            RAW_TAG="${{ inputs.tag_name }}"
+          fi
+          CLEAN_VERSION=$(echo "$RAW_TAG" | sed -E 's/^(desktop-)?v//')
+          if [ -z "$CLEAN_VERSION" ]; then
+            CLEAN_VERSION=$(node -p "require('./package.json').version")
+          fi
+          RELEASE_TAG="desktop-v${CLEAN_VERSION}"
+          RELEASE_TITLE="SkyDrop v${CLEAN_VERSION}"
+
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
+          echo "RELEASE_TITLE=$RELEASE_TITLE" >> $GITHUB_ENV
+
+          # Detect artifact filenames in staging
+          DEB_FILE=$(ls staging/*.deb 2>/dev/null | xargs -n1 basename | head -n1 || echo "")
+          APPIMAGE_FILE=$(ls staging/*.AppImage 2>/dev/null | xargs -n1 basename | head -n1 || echo "")
+          EXE_FILE=$(ls staging/*.exe 2>/dev/null | xargs -n1 basename | head -n1 || echo "")
+
+          # Check if custom RELEASE_NOTES.md exists in desktop folder
+          if [ -f "RELEASE_NOTES.md" ]; then
+            echo "Using desktop/RELEASE_NOTES.md for release body"
+            cat RELEASE_NOTES.md > release_body.md
+          else
+            echo "Generating release notes from git commit log..."
+            # Find the previous desktop tag
+            PREV_TAG=$(git tag -l "desktop-v*" --sort=-v:refname | grep -v "^${RELEASE_TAG}$" | grep -v "^desktop-v${CLEAN_VERSION}$" | head -n 1 || true)
+            
+            COMMITS=""
+            if [ -n "$PREV_TAG" ]; then
+              echo "Extracting desktop commits since $PREV_TAG..."
+              COMMITS=$(git log "${PREV_TAG}..HEAD" --oneline -- . || true)
+            fi
+
+            if [ -z "$COMMITS" ]; then
+              echo "Extracting last 20 desktop commits..."
+              COMMITS=$(git log -n 20 --oneline -- . || true)
+            fi
+
+            # Format bullet points
+            NOTES_LIST=$(echo "$COMMITS" | sed -E 's/^[a-f0-9]+ /- /' | grep -v '^[[:space:]]*$' || echo "- Maintenance updates and stability improvements.")
+
+            {
+              echo "## What's new"
+              echo "$NOTES_LIST"
+              echo ""
+              echo "## Downloads"
+              echo "- **Debian / Ubuntu Package**: \`${DEB_FILE}\`"
+              echo "- **Linux Standalone (AppImage)**: \`${APPIMAGE_FILE}\`"
+              echo "- **Windows Setup Installer**: \`${EXE_FILE}\`"
+              echo ""
+              echo "Please verify all downloads against the included \`sha256sums.txt\` checksums file."
+            } > release_body.md
+          fi
+
+          echo "Final Release Notes:"
+          cat release_body.md
+
+      - name: Publish GitHub Release to Public Repository
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "✓ Dry-run enabled. Skipping publication to public repository."
+            echo "Target Repo: ${{ env.RELEASES_REPO }}"
+            echo "Release Tag: $RELEASE_TAG"
+            echo "Release Title: $RELEASE_TITLE"
+            exit 0
+          fi
+
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Secret RELEASES_REPO_TOKEN is not set or empty! Please configure it in your repository secrets."
+            exit 1
+          fi
+
+          echo "Publishing release '$RELEASE_TITLE' ($RELEASE_TAG) to ${{ env.RELEASES_REPO }}..."
+          gh release create "$RELEASE_TAG" \
+            --repo "${{ env.RELEASES_REPO }}" \
+            --title "$RELEASE_TITLE" \
+            --notes-file release_body.md \
+            staging/*.deb \
+            staging/*.AppImage \
+            staging/*.exe \
+            staging/sha256sums.txt

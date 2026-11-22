@@ -17,6 +17,20 @@ try {
   }
 
   // Find AppImage, Deb, and Windows Exe files corresponding to current version
+  const foundArtifacts = [];
+  try {
+    const distFiles = fs.readdirSync(distDir);
+    for (const f of distFiles) {
+      if ((f.endsWith('.AppImage') || f.endsWith('.deb') || f.endsWith('.exe')) &&
+          (f.includes(version) || f.toLowerCase().includes('skydrop'))) {
+        if (!foundArtifacts.some(a => a.name === f)) {
+          foundArtifacts.push({ name: f, path: path.join(distDir, f) });
+        }
+      }
+    }
+  } catch (_) {}
+
+  // Explicit fallback check for canonical filenames
   const appImageName = `SkyDrop-${version}.AppImage`;
   const debName = `skydrop-desktop_${version}_amd64.deb`;
   const exeName = `SkyDrop-Setup-${version}.exe`;
@@ -25,23 +39,14 @@ try {
   const debPath = path.join(distDir, debName);
   const exePath = path.join(distDir, exeName);
 
-  const foundArtifacts = [];
-  if (fs.existsSync(appImagePath)) foundArtifacts.push({ name: appImageName, path: appImagePath });
-  if (fs.existsSync(debPath)) foundArtifacts.push({ name: debName, path: debPath });
-  if (fs.existsSync(exePath)) {
+  if (fs.existsSync(appImagePath) && !foundArtifacts.some(a => a.name === appImageName)) {
+    foundArtifacts.push({ name: appImageName, path: appImagePath });
+  }
+  if (fs.existsSync(debPath) && !foundArtifacts.some(a => a.name === debName)) {
+    foundArtifacts.push({ name: debName, path: debPath });
+  }
+  if (fs.existsSync(exePath) && !foundArtifacts.some(a => a.name === exeName)) {
     foundArtifacts.push({ name: exeName, path: exePath });
-  } else {
-    // Also check for any .exe matching version or productName in distDir
-    try {
-      const distFiles = fs.readdirSync(distDir);
-      for (const f of distFiles) {
-        if (f.endsWith('.exe') && (f.includes(version) || f.toLowerCase().includes('skydrop'))) {
-          if (!foundArtifacts.some(a => a.name === f)) {
-            foundArtifacts.push({ name: f, path: path.join(distDir, f) });
-          }
-        }
-      }
-    } catch (_) {}
   }
 
   if (foundArtifacts.length === 0) {

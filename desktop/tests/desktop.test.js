@@ -848,6 +848,42 @@ async function runTests() {
     console.log('  ✓ Windows NSIS packaging, icon.ico, daemon cross-compiler, windowsHide, autostart login items, and exe updater verified');
   }
 
+  // Test 26: GitHub Actions automated release pipeline & electron-builder configuration validation
+  {
+    console.log('[Test 26] GitHub Actions release workflow & publish configuration validation...');
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
+    const workflowPath = path.resolve(__dirname, '../../.github/workflows/release.yml');
+
+    // 1. Workflow file exists at root .github/workflows/
+    assert(fs.existsSync(workflowPath), '.github/workflows/release.yml must exist at repo root');
+    const workflowYaml = fs.readFileSync(workflowPath, 'utf8');
+
+    // 2. electron-builder publish configuration
+    assert.strictEqual(pkg.build.publish, 'never', 'package.json build.publish must be set to "never"');
+
+    // 3. Trigger restrictions (desktop-v* tags and workflow_dispatch)
+    assert(workflowYaml.includes('desktop-v*'), 'release.yml must trigger on desktop-v* tags');
+    assert(workflowYaml.includes('workflow_dispatch:'), 'release.yml must support workflow_dispatch manual runs');
+    assert(workflowYaml.includes('dry_run:'), 'release.yml must support dry_run input');
+
+    // 4. Working directory scoping & dependency caching
+    assert(workflowYaml.includes('working-directory: desktop'), 'release.yml must use working-directory: desktop');
+    assert(workflowYaml.includes('cache-dependency-path: desktop/package-lock.json'), 'release.yml must cache with desktop/package-lock.json');
+
+    // 5. Multi-platform build jobs and release job
+    assert(workflowYaml.includes('build-linux:'), 'release.yml missing build-linux job');
+    assert(workflowYaml.includes('build-windows:'), 'release.yml missing build-windows job');
+    assert(workflowYaml.includes('publish-release:'), 'release.yml missing publish-release job');
+    assert(workflowYaml.includes('needs: [build-linux, build-windows]'), 'publish-release must depend on both build jobs');
+
+    // 6. Artifact integrity & publication
+    assert(workflowYaml.includes('sha256sums.txt'), 'release.yml must compute sha256sums.txt');
+    assert(workflowYaml.includes('gh release create'), 'release.yml must publish via gh release create');
+    assert(workflowYaml.includes('RELEASES_REPO_TOKEN'), 'release.yml must use RELEASES_REPO_TOKEN secret');
+
+    console.log('  ✓ GitHub Actions release workflow, tag triggers, scoped directories, SHA-256 verification, and publication verified');
+  }
+
   console.log('\n✅ All SkyDrop desktop tests passed successfully!');
   process.exit(0);
 }

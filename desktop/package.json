@@ -52,6 +52,7 @@
     "directories": {
       "output": "dist"
     },
+    "publish": "never",
     "linux": {
       "target": [
         "AppImage",
@@ -60,7 +61,15 @@
       "maintainer": "SkyDrop Team <dev@skydrop.local>",
       "category": "Network",
       "synopsis": "Seamless local network file dropping",
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.png",
+      "artifactName": "skydrop-${version}-linux-${arch}.${ext}"
+    },
+    "deb": {
+      "afterInstall": "build/debian/after-install.sh",
+      "artifactName": "skydrop-${version}-linux-amd64.deb"
+    },
+    "appImage": {
+      "artifactName": "skydrop-${version}-linux-x86_64.AppImage"
     },
     "win": {
       "target": [
@@ -72,6 +81,7 @@
         }
       ],
       "icon": "assets/icon.ico",
+      "artifactName": "skydrop-${version}-win-x64-setup.exe",
       "extraResources": [
         {
           "from": "bin/skydrop-daemon.exe",
