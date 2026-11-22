@@ -52,7 +52,11 @@
     "directories": {
       "output": "dist"
     },
-    "publish": "never",
+    "publish": {
+      "provider": "github",
+      "owner": "PMGEECODE",
+      "repo": "skydrop-release"
+    },
     "linux": {
       "target": [
         "AppImage",

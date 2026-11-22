@@ -859,7 +859,11 @@ async function runTests() {
     const workflowYaml = fs.readFileSync(workflowPath, 'utf8');
 
     // 2. electron-builder publish configuration
-    assert.strictEqual(pkg.build.publish, 'never', 'package.json build.publish must be set to "never"');
+    assert(pkg.build.publish, 'package.json missing build.publish config');
+    assert.strictEqual(pkg.build.publish.provider, 'github', 'build.publish provider must be github');
+    assert.strictEqual(pkg.build.publish.owner, 'PMGEECODE', 'build.publish owner must be PMGEECODE');
+    assert.strictEqual(pkg.build.publish.repo, 'skydrop-release', 'build.publish repo must be skydrop-release');
+    assert(workflowYaml.includes('--publish never'), 'workflow must pass --publish never flag');
 
     // 3. Trigger restrictions (desktop-v* tags and workflow_dispatch)
     assert(workflowYaml.includes('desktop-v*'), 'release.yml must trigger on desktop-v* tags');
