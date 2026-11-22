@@ -885,6 +885,10 @@ async function runTests() {
     assert(workflowYaml.includes('gh release create'), 'release.yml must publish via gh release create');
     assert(workflowYaml.includes('RELEASES_REPO_TOKEN'), 'release.yml must use RELEASES_REPO_TOKEN secret');
 
+    // 7. Automated release script verification
+    assert(pkg.scripts.release, 'package.json missing release script');
+    assert(fs.existsSync(path.join(__dirname, '../scripts/release.js')), 'scripts/release.js must exist');
+
     console.log('  ✓ GitHub Actions release workflow, tag triggers, scoped directories, SHA-256 verification, and publication verified');
   }
 
