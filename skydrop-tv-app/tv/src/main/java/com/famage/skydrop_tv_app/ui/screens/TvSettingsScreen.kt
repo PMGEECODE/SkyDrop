@@ -106,6 +106,11 @@ fun TvSettingsScreen(
             )
         }
 
+        // 2b. Display Over Other Apps Permission Card
+        item(key = "overlay_permission_card") {
+            TvOverlayPermissionCard()
+        }
+
         // 3. Quick Action Buttons Row (My QR & Manual Connect - camera scan removed for TV)
         item(key = "quick_actions_row") {
             Row(

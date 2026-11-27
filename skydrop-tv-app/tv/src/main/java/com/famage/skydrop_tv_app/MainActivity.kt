@@ -12,12 +12,16 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
 import com.famage.skydrop_tv_app.receiver.TvReceiverService
+import com.famage.skydrop_tv_app.receiver.TvSystemOverlayManager
 import com.famage.skydrop_tv_app.settings.TvSettingsStore
+import com.famage.skydrop_tv_app.ui.components.TvOverlayPermissionDialog
 import com.famage.skydrop_tv_app.ui.components.TvSplashScreen
 import com.famage.skydrop_tv_app.ui.screens.TvMainScreen
 import com.famage.skydrop_tv_app.ui.theme.SkydroptvappTheme
 
 class MainActivity : ComponentActivity() {
+    private var hasPromptedOverlayThisSession = false
+
     @OptIn(ExperimentalTvMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         // Switch from the starting splash theme to standard app theme
@@ -36,6 +40,17 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themePreference by settings.themePreference.collectAsState()
             var showSplash by remember { mutableStateOf(true) }
+            var showOverlayPrompt by remember { mutableStateOf(false) }
+
+            // Once splash finishes, ask for overlay permission if not yet granted
+            LaunchedEffect(showSplash) {
+                if (!showSplash && !hasPromptedOverlayThisSession) {
+                    if (!TvSystemOverlayManager.canDrawOverlays(this@MainActivity)) {
+                        showOverlayPrompt = true
+                    }
+                    hasPromptedOverlayThisSession = true
+                }
+            }
 
             SkydroptvappTheme(themePreference = themePreference) {
                 Surface(
@@ -53,6 +68,12 @@ class MainActivity : ComponentActivity() {
                         } else {
                             TvMainScreen()
                         }
+                    }
+
+                    if (showOverlayPrompt) {
+                        TvOverlayPermissionDialog(
+                            onDismiss = { showOverlayPrompt = false }
+                        )
                     }
                 }
             }
