@@ -73,7 +73,8 @@ class TvUpdateService(
     }
 
     /**
-     * Queries the GitHub Releases API and determines if a newer release with a matching APK exists.
+     * Queries the GitHub Releases API (with seamless fallback to Atom feed & expanded assets
+     * when unauthenticated GitHub API rate limits occur) and determines if a newer release with a matching TV APK exists.
      */
     suspend fun checkGitHubReleases(): TvUpdateInfo = withContext(Dispatchers.IO) {
         val currentVersion = getCurrentVersionName()
@@ -88,32 +89,88 @@ class TvUpdateService(
             val code = response.code
             val body = response.body?.string().orEmpty()
 
-            if (code == 403) {
-                return@withContext TvUpdateInfo(
-                    isUpdateAvailable = false,
-                    currentVersion = currentVersion,
-                    latestVersion = currentVersion,
-                    releaseTitle = "",
-                    releaseNotes = "",
-                    releaseUrl = TvUpdateConfig.RELEASES_REPO_URL,
-                    targetAsset = null,
-                    errorMessage = "GitHub API rate limit exceeded. Please try again later."
-                )
-            }
+            if (response.isSuccessful && body.isNotBlank()) {
+                val releasesArray = JSONArray(body)
+                var bestCandidateRelease: JSONObject? = null
+                var bestCandidateVersion = ""
+                var bestTargetAsset: TvReleaseAsset? = null
+                var bestChecksumAsset: TvReleaseAsset? = null
 
-            if (code == 404) {
-                return@withContext TvUpdateInfo(
-                    isUpdateAvailable = false,
-                    currentVersion = currentVersion,
-                    latestVersion = currentVersion,
-                    releaseTitle = "",
-                    releaseNotes = "",
-                    releaseUrl = TvUpdateConfig.RELEASES_REPO_URL,
-                    targetAsset = null,
-                    errorMessage = "Releases repository not found."
-                )
-            }
+                for (i in 0 until releasesArray.length()) {
+                    val rel = releasesArray.getJSONObject(i)
+                    if (rel.optBoolean("draft", false)) continue
 
+                    val tagName = rel.optString("tag_name", rel.optString("name", ""))
+                    val cleanTag = TvVersionComparator.cleanVersion(tagName)
+
+                    val assetsJson = rel.optJSONArray("assets") ?: JSONArray()
+                    val allAssets = mutableListOf<TvReleaseAsset>()
+                    for (j in 0 until assetsJson.length()) {
+                        val a = assetsJson.getJSONObject(j)
+                        allAssets.add(
+                            TvReleaseAsset(
+                                name = a.optString("name", ""),
+                                downloadUrl = a.optString("browser_download_url", ""),
+                                sizeBytes = a.optLong("size", 0L)
+                            )
+                        )
+                    }
+
+                    // Only consider releases that actually contain a valid TV APK asset
+                    val targetAsset = TvUpdateConfig.selectTargetApkAsset(allAssets) ?: continue
+
+                    if (bestCandidateRelease == null || TvVersionComparator.compare(cleanTag, bestCandidateVersion) > 0) {
+                        bestCandidateRelease = rel
+                        bestCandidateVersion = cleanTag
+                        bestTargetAsset = targetAsset
+                        bestChecksumAsset = allAssets.firstOrNull {
+                            val lower = it.name.lowercase()
+                            lower.contains("sha256") || lower.contains("checksum")
+                        }
+                    }
+                }
+
+                if (bestCandidateRelease != null && bestTargetAsset != null) {
+                    val isNewer = TvVersionComparator.isNewer(bestCandidateVersion, currentVersion)
+                    val releaseTitle = bestCandidateRelease.optString("name", "v$bestCandidateVersion")
+                    val releaseNotes = bestCandidateRelease.optString("body", "No release notes provided.")
+                    val releaseUrl = bestCandidateRelease.optString("html_url", TvUpdateConfig.RELEASES_REPO_URL)
+
+                    return@withContext TvUpdateInfo(
+                        isUpdateAvailable = isNewer,
+                        currentVersion = currentVersion,
+                        latestVersion = bestCandidateVersion,
+                        releaseTitle = releaseTitle,
+                        releaseNotes = releaseNotes,
+                        releaseUrl = releaseUrl,
+                        targetAsset = bestTargetAsset,
+                        checksumAsset = bestChecksumAsset,
+                        errorMessage = null
+                    )
+                }
+            } else {
+                Log.w(TAG, "GitHub API returned HTTP $code; attempting Atom feed fallback...")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "API check exception (${e.message}); attempting Atom feed fallback...")
+        }
+
+        // Fallback to Atom feed and expanded assets (avoids GitHub API 60 req/hr rate limit)
+        checkReleasesViaAtomFeed(currentVersion)
+    }
+
+    /**
+     * Checks releases via GitHub Atom feed and expanded_assets.
+     * Guaranteed to work without hitting unauthenticated GitHub API rate limits.
+     */
+    suspend fun checkReleasesViaAtomFeed(currentVersion: String): TvUpdateInfo = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url(TvUpdateConfig.ATOM_RELEASES_URL)
+                .header("User-Agent", TvUpdateConfig.USER_AGENT)
+                .build()
+
+            val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
                 return@withContext TvUpdateInfo(
                     isUpdateAvailable = false,
@@ -123,12 +180,13 @@ class TvUpdateService(
                     releaseNotes = "",
                     releaseUrl = TvUpdateConfig.RELEASES_REPO_URL,
                     targetAsset = null,
-                    errorMessage = "GitHub API error (HTTP $code)"
+                    errorMessage = "Update check failed (HTTP ${response.code})"
                 )
             }
 
-            val releasesArray = JSONArray(body)
-            if (releasesArray.length() == 0) {
+            val xml = response.body?.string().orEmpty()
+            val entryBlocks = xml.split("<entry>").drop(1)
+            if (entryBlocks.isEmpty()) {
                 return@withContext TvUpdateInfo(
                     isUpdateAvailable = false,
                     currentVersion = currentVersion,
@@ -141,72 +199,92 @@ class TvUpdateService(
                 )
             }
 
-            // Iterate releases to find the latest non-draft release
-            var candidateRelease: JSONObject? = null
-            var candidateVersion = ""
+            var bestTag = ""
+            var bestVersion = ""
+            var bestTitle = ""
+            var bestTargetAsset: TvReleaseAsset? = null
+            var bestChecksumAsset: TvReleaseAsset? = null
 
-            for (i in 0 until releasesArray.length()) {
-                val rel = releasesArray.getJSONObject(i)
-                if (rel.optBoolean("draft", false)) continue
+            for (block in entryBlocks) {
+                val tagMatch = Regex("<id>[^<]*/([^/<]+)</id>").find(block)
+                    ?: Regex("href=\"[^\"]*/releases/tag/([^\"]+)\"").find(block)
+                val rawTag = tagMatch?.groupValues?.get(1)?.trim().orEmpty()
+                if (rawTag.isBlank()) continue
 
-                val tagName = rel.optString("tag_name", rel.optString("name", ""))
-                val cleanTag = TvVersionComparator.cleanVersion(tagName)
+                val titleMatch = Regex("<title>([^<]+)</title>").find(block)
+                val rawTitle = titleMatch?.groupValues?.get(1)?.trim().orEmpty()
 
-                if (candidateRelease == null || TvVersionComparator.compare(cleanTag, candidateVersion) > 0) {
-                    candidateRelease = rel
-                    candidateVersion = cleanTag
+                val cleanTag = TvVersionComparator.cleanVersion(rawTag)
+
+                // If we already found a valid target asset and this entry version is not higher, skip checking expanded assets
+                if (bestTargetAsset != null && TvVersionComparator.compare(cleanTag, bestVersion) <= 0) {
+                    continue
+                }
+
+                // Query expanded_assets for this release tag
+                val assetsUrl = "${TvUpdateConfig.EXPANDED_ASSETS_URL}/$rawTag"
+                val assetsReq = Request.Builder()
+                    .url(assetsUrl)
+                    .header("User-Agent", TvUpdateConfig.USER_AGENT)
+                    .build()
+
+                try {
+                    val assetsRes = client.newCall(assetsReq).execute()
+                    if (assetsRes.isSuccessful) {
+                        val html = assetsRes.body?.string().orEmpty()
+                        val assetMatches = Regex("href=[\"'](/${TvUpdateConfig.DEFAULT_REPO_OWNER}/${TvUpdateConfig.DEFAULT_REPO_NAME}/releases/download/[^\"']+)[\"']").findAll(html)
+                        val assetsList = mutableListOf<TvReleaseAsset>()
+                        for (m in assetMatches) {
+                            val path = m.groupValues[1]
+                            val assetName = path.substringAfterLast("/")
+                            val downloadUrl = "https://github.com$path"
+                            assetsList.add(TvReleaseAsset(name = assetName, downloadUrl = downloadUrl, sizeBytes = 0L))
+                        }
+
+                        val targetAsset = TvUpdateConfig.selectTargetApkAsset(assetsList)
+                        if (targetAsset != null) {
+                            bestTag = rawTag
+                            bestVersion = cleanTag
+                            bestTitle = if (rawTitle.isNotBlank()) rawTitle else "SkyDrop TV v$cleanTag"
+                            bestTargetAsset = targetAsset
+                            bestChecksumAsset = assetsList.firstOrNull {
+                                val lower = it.name.lowercase()
+                                lower.contains("sha256") || lower.contains("checksum")
+                            }
+                        }
+                    }
+                } catch (ae: Exception) {
+                    Log.w(TAG, "Failed to inspect expanded assets for $rawTag: ${ae.message}")
                 }
             }
 
-            if (candidateRelease == null) {
+            if (bestTargetAsset != null) {
+                val isNewer = TvVersionComparator.isNewer(bestVersion, currentVersion)
                 return@withContext TvUpdateInfo(
-                    isUpdateAvailable = false,
+                    isUpdateAvailable = isNewer,
                     currentVersion = currentVersion,
-                    latestVersion = currentVersion,
-                    releaseTitle = "",
-                    releaseNotes = "",
-                    releaseUrl = TvUpdateConfig.RELEASES_REPO_URL,
-                    targetAsset = null
+                    latestVersion = bestVersion,
+                    releaseTitle = bestTitle,
+                    releaseNotes = "Release notes available at GitHub.",
+                    releaseUrl = "${TvUpdateConfig.RELEASES_REPO_URL}/releases/tag/$bestTag",
+                    targetAsset = bestTargetAsset,
+                    checksumAsset = bestChecksumAsset,
+                    errorMessage = null
                 )
-            }
-
-            val isNewer = TvVersionComparator.isNewer(candidateVersion, currentVersion)
-            val releaseTitle = candidateRelease.optString("name", "v$candidateVersion")
-            val releaseNotes = candidateRelease.optString("body", "No release notes provided.")
-            val releaseUrl = candidateRelease.optString("html_url", TvUpdateConfig.RELEASES_REPO_URL)
-
-            val assetsJson = candidateRelease.optJSONArray("assets") ?: JSONArray()
-            val allAssets = mutableListOf<TvReleaseAsset>()
-            for (j in 0 until assetsJson.length()) {
-                val a = assetsJson.getJSONObject(j)
-                allAssets.add(
-                    TvReleaseAsset(
-                        name = a.optString("name", ""),
-                        downloadUrl = a.optString("browser_download_url", ""),
-                        sizeBytes = a.optLong("size", 0L)
-                    )
-                )
-            }
-
-            val targetAsset = TvUpdateConfig.selectTargetApkAsset(allAssets)
-            val checksumAsset = allAssets.firstOrNull {
-                val lower = it.name.lowercase()
-                lower.contains("sha256") || lower.contains("checksum")
             }
 
             TvUpdateInfo(
-                isUpdateAvailable = isNewer && targetAsset != null,
+                isUpdateAvailable = false,
                 currentVersion = currentVersion,
-                latestVersion = candidateVersion,
-                releaseTitle = releaseTitle,
-                releaseNotes = releaseNotes,
-                releaseUrl = releaseUrl,
-                targetAsset = targetAsset,
-                checksumAsset = checksumAsset,
+                latestVersion = currentVersion,
+                releaseTitle = "",
+                releaseNotes = "",
+                releaseUrl = TvUpdateConfig.RELEASES_REPO_URL,
+                targetAsset = null,
                 errorMessage = null
             )
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to check GitHub releases: ${e.message}")
+            Log.w(TAG, "Failed to check releases via Atom feed: ${e.message}")
             TvUpdateInfo(
                 isUpdateAvailable = false,
                 currentVersion = currentVersion,

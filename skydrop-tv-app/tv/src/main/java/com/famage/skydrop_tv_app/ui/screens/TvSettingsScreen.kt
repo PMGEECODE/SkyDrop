@@ -66,9 +66,30 @@ fun TvSettingsScreen(
     deviceName: String = "Smart_TV",
     saveLocation: String = "Downloads/SkyDrop",
     listeningPort: Int = 8444,
-    appVersion: String = "1.0.0",
+    appVersion: String = "",
+    onCheckForUpdates: (() -> Unit)? = null,
+    isCheckingUpdates: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val currentAppVersion = remember(appVersion, context) {
+        if (appVersion.isNotBlank() && appVersion != "1.0.0") {
+            appVersion
+        } else {
+            try {
+                val pInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.packageManager.getPackageInfo(context.packageName, 0)
+                }
+                pInfo.versionName ?: "1.0.42"
+            } catch (_: Exception) {
+                "1.0.42"
+            }
+        }
+    }
+
     val activeConnected = remember(peers) { peers.firstOrNull { it.canSend } }
 
     LazyColumn(
@@ -194,15 +215,31 @@ fun TvSettingsScreen(
             )
         }
 
-        // 7. Official SkyDrop Logo & Version Footer
+        // 7. Official SkyDrop Logo & Version Footer with Check for Updates action
         item {
+            val interactionSource = remember { MutableInteractionSource() }
+            val isFocused by interactionSource.collectIsFocusedAsState()
+
             Spacer(modifier = Modifier.height(2.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .scale(if (isFocused) 1.02f else 1f)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(TvBgSurface)
-                    .border(1.dp, TvBorder, RoundedCornerShape(16.dp))
+                    .background(if (isFocused) TvBorder.copy(alpha = 0.3f) else TvBgSurface)
+                    .border(
+                        width = if (isFocused) 2.dp else 1.dp,
+                        color = if (isFocused) SkyBlue else TvBorder,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .focusable(interactionSource = interactionSource)
+                    .clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        enabled = !isCheckingUpdates
+                    ) {
+                        onCheckForUpdates?.invoke()
+                    }
                     .padding(18.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -218,9 +255,14 @@ fun TvSettingsScreen(
                             .wrapContentWidth()
                     )
                     Text(
-                        text = "Version $appVersion • High-Speed Local Peer Drop",
-                        color = TvTextSecondary,
-                        fontSize = 11.sp
+                        text = if (isCheckingUpdates) {
+                            "Checking for updates..."
+                        } else {
+                            "Version $currentAppVersion • Click to check for updates ↗"
+                        },
+                        color = if (isFocused) SkyBlue else TvTextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal
                     )
                 }
             }

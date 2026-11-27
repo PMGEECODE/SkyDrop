@@ -11,6 +11,8 @@ object TvUpdateConfig {
     // Primary releases repository URL
     const val RELEASES_REPO_URL = "https://github.com/$DEFAULT_REPO_OWNER/$DEFAULT_REPO_NAME"
     const val API_RELEASES_URL = "https://api.github.com/repos/$DEFAULT_REPO_OWNER/$DEFAULT_REPO_NAME/releases"
+    const val ATOM_RELEASES_URL = "https://github.com/$DEFAULT_REPO_OWNER/$DEFAULT_REPO_NAME/releases.atom"
+    const val EXPANDED_ASSETS_URL = "https://github.com/$DEFAULT_REPO_OWNER/$DEFAULT_REPO_NAME/releases/expanded_assets"
 
     // User-Agent identifying the client
     const val USER_AGENT = "SkyDrop-TV-App"

@@ -50,12 +50,25 @@ class DaemonManager {
     return new Promise((resolve) => {
       const url = `${this.getBaseUrl()}/api/peers`;
       const client = this.useTLS ? https : http;
+      let body = '';
       const req = client.get(
         url,
         { agent: this.agent, timeout: 1500 },
         (res) => {
           if (res.statusCode >= 200 && res.statusCode < 500) {
-            resolve(true);
+            res.on('data', (chunk) => { body += chunk; });
+            res.on('end', () => {
+              try {
+                const parsed = JSON.parse(body);
+                // On non-Windows platforms, reject any emulated Wine daemon squatting on the port
+                if (process.platform !== 'win32' && parsed && typeof parsed.storage === 'string' && /^[a-zA-Z]:\\/.test(parsed.storage)) {
+                  console.warn('[DaemonManager] Foreign Wine/Windows daemon detected on port', this.port);
+                  resolve(false);
+                  return;
+                }
+              } catch (_) {}
+              resolve(true);
+            });
           } else {
             resolve(false);
           }
@@ -71,7 +84,16 @@ class DaemonManager {
 
   async start() {
     this.isQuitting = false;
-    const isAlreadyRunning = await this.checkRunning();
+    let isAlreadyRunning = await this.checkRunning();
+
+    // If on Linux/macOS and a foreign or zombie Wine process exists, clear it
+    if (!isAlreadyRunning && process.platform !== 'win32') {
+      try {
+        const { execSync } = require('child_process');
+        execSync('killall -9 skydrop-daemon.exe 2>/dev/null || true');
+      } catch (_) {}
+    }
+
     if (isAlreadyRunning) {
       console.log('[DaemonManager] Existing SkyDrop daemon detected on port', this.port);
       this.isManaged = false;

@@ -1,6 +1,7 @@
 package com.famage.skydrop_tv_app.ui.screens
 
 import android.content.Intent
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -84,6 +85,39 @@ fun TvMainScreen(
     var availableUpdate by remember { mutableStateOf<TvUpdateInfo?>(null) }
     var updateProgress by remember { mutableStateOf<TvUpdateDownloadProgress?>(null) }
     var isDownloadingUpdate by remember { mutableStateOf(false) }
+    var isCheckingUpdates by remember { mutableStateOf(false) }
+    var notificationMessage by remember { mutableStateOf<String?>(null) }
+
+    val currentAppVersion = remember(context) {
+        try {
+            val pInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            pInfo.versionName ?: "1.0.42"
+        } catch (_: Exception) {
+            "1.0.42"
+        }
+    }
+
+    val handleCheckForUpdates: () -> Unit = {
+        if (!isCheckingUpdates && !isDownloadingUpdate) {
+            isCheckingUpdates = true
+            scope.launch {
+                val info = updateService.checkGitHubReleases()
+                isCheckingUpdates = false
+                if (info.isUpdateAvailable && info.targetAsset != null) {
+                    availableUpdate = info
+                } else if (info.errorMessage != null) {
+                    notificationMessage = "Update check: ${info.errorMessage}"
+                } else {
+                    notificationMessage = "SkyDrop is up to date (v$currentAppVersion)"
+                }
+            }
+        }
+    }
 
     // Check for updates on app launch only
     LaunchedEffect(Unit) {
@@ -92,8 +126,6 @@ fun TvMainScreen(
             availableUpdate = info
         }
     }
-
-    var notificationMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(serviceAlert) {
         if (serviceAlert != null) {
@@ -210,7 +242,10 @@ fun TvMainScreen(
                             deviceName = deviceName,
                             saveLocation = saveLocation,
                             listeningPort = listeningPort,
-                            storageOverview = storageOverview
+                            storageOverview = storageOverview,
+                            appVersion = currentAppVersion,
+                            onCheckForUpdates = handleCheckForUpdates,
+                            isCheckingUpdates = isCheckingUpdates
                         )
                         TvNavItem.HISTORY -> TvTransferHistoryScreen(
                             historyItems = historyRecords,
@@ -249,7 +284,10 @@ fun TvMainScreen(
                             deviceName = deviceName,
                             saveLocation = saveLocation,
                             listeningPort = listeningPort,
-                            storageOverview = storageOverview
+                            storageOverview = storageOverview,
+                            appVersion = currentAppVersion,
+                            onCheckForUpdates = handleCheckForUpdates,
+                            isCheckingUpdates = isCheckingUpdates
                         )
                     }
                 }

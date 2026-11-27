@@ -1,6 +1,7 @@
 package com.famage.skydrop_tv_app.receiver
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import com.famage.skydrop_tv_app.history.TvHistoryStore
@@ -179,11 +180,25 @@ class TvReceiverServer(
         }
     }
 
+    private fun getAppVersion(): String {
+        return try {
+            val pInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            pInfo.versionName ?: "1.0.42"
+        } catch (_: Exception) {
+            "1.0.42"
+        }
+    }
+
     private fun handleInfo(output: OutputStream) {
         val devName = TvIdentityManager.getDeviceName()
         val json = JSONObject().apply {
             put("device_name", devName)
-            put("version", "1.0.0")
+            put("version", getAppVersion())
             put("os", "android-tv")
             put("protocol", "skydrop/v1")
             put("tls_enabled", false)
@@ -216,7 +231,7 @@ class TvReceiverServer(
         val json = JSONObject().apply {
             put("device_id", devId)
             put("device_name", devName)
-            put("app_version", "1.0.0")
+            put("app_version", getAppVersion())
             put("protocol_version", "skydrop/v1")
             put("capabilities", capsArray)
             put("state", if (isTransferring) "transferring" else "idle")
