@@ -1,0 +1,3 @@
+[submodule "Android-app"]
+	path = Android-app
+	url = https://github.com/PMGEECODE/skydrop-app.git
