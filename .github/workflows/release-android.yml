@@ -1,0 +1,207 @@
+name: Release SkyDrop Android
+
+on:
+  push:
+    tags:
+      - 'android-v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag or version to release (e.g. android-v1.0.45 or 1.0.45)'
+        required: false
+        type: string
+        default: ''
+      dry_run:
+        description: 'Dry run: build and verify without publishing to public repo'
+        required: false
+        type: boolean
+        default: false
+
+# Restrict default GITHUB_TOKEN permissions
+permissions:
+  contents: read
+
+env:
+  RELEASES_REPO: ${{ vars.RELEASES_REPO || 'PMGEECODE/skydrop-release' }}
+
+jobs:
+  build-android-apk:
+    name: Build Android Mobile APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Android-app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.RELEASES_REPO_TOKEN || github.token }}
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Validate version matches tag
+        run: |
+          RAW_TAG="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.tag_name }}" ]; then
+              RAW_TAG="${{ inputs.tag_name }}"
+            else
+              RAW_TAG="android-v$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)"
+            fi
+          fi
+          CLEAN_VERSION=$(echo "$RAW_TAG" | sed -E 's/^(android-)?v//')
+          GRADLE_VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+
+          echo "Target tag: $RAW_TAG (parsed version: $CLEAN_VERSION)"
+          echo "Android-app/app/build.gradle.kts versionName: $GRADLE_VERSION"
+
+          if [ -n "$CLEAN_VERSION" ] && [ "$CLEAN_VERSION" != "$GRADLE_VERSION" ]; then
+            echo "::error::Tag version ($CLEAN_VERSION) does not match app/build.gradle.kts versionName ($GRADLE_VERSION)!"
+            exit 1
+          fi
+          echo "✓ Version verification passed: $GRADLE_VERSION"
+
+      - name: Run Android Unit Tests
+        run: ./gradlew :app:testDebugUnitTest
+
+      - name: Ensure Signing Keystore Exists
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ -f "debug.keystore" ]; then
+            cp debug.keystore "$HOME/.android/debug.keystore"
+            echo "✓ Configured signing keystore from repository debug.keystore"
+          else
+            echo "Generating fallback debug keystore..."
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            cp "$HOME/.android/debug.keystore" debug.keystore
+          fi
+
+      - name: Build Release APK
+        run: ./gradlew :app:assembleRelease
+
+      - name: Stage Android APK and Compute Checksum
+        run: |
+          mkdir -p staging
+          RAW_TAG="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag_name }}" ]; then
+            RAW_TAG="${{ inputs.tag_name }}"
+          fi
+          CLEAN_VERSION=$(echo "$RAW_TAG" | sed -E 's/^(android-)?v//')
+          if [ -z "$CLEAN_VERSION" ]; then
+            CLEAN_VERSION="1.0.45"
+          fi
+          APK_NAME="SkyDrop-android-${CLEAN_VERSION}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "staging/${APK_NAME}"
+          cd staging
+          sha256sum "${APK_NAME}" > sha256sums.txt
+          echo "Staged APK: ${APK_NAME}"
+          cat sha256sums.txt
+
+      - name: Upload Android build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-artifacts
+          path: |
+            Android-app/staging/*.apk
+            Android-app/staging/sha256sums.txt
+          if-no-files-found: error
+
+  publish-android-release:
+    name: Publish Android Release to Public Repository
+    needs: [build-android-apk]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.RELEASES_REPO_TOKEN || github.token }}
+
+      - name: Create staging directory and download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-artifacts
+          path: staging
+
+      - name: Publish Release to Public Repository
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          RAW_TAG="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag_name }}" ]; then
+            RAW_TAG="${{ inputs.tag_name }}"
+          fi
+          CLEAN_VERSION=$(echo "$RAW_TAG" | sed -E 's/^(android-)?v//')
+          if [ -z "$CLEAN_VERSION" ]; then
+            CLEAN_VERSION="1.0.45"
+          fi
+          RELEASE_TAG="android-v${CLEAN_VERSION}"
+          RELEASE_TITLE="SkyDrop Android v${CLEAN_VERSION}"
+
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "✓ Dry-run enabled. Skipping publication to public repository."
+            echo "Target Repo: ${{ env.RELEASES_REPO }}"
+            echo "Release Tag: $RELEASE_TAG"
+            echo "Release Title: $RELEASE_TITLE"
+            exit 0
+          fi
+
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Secret RELEASES_REPO_TOKEN is not set or empty! Please configure it in your repository secrets."
+            exit 1
+          fi
+
+          APK_FILE=$(ls staging/*.apk 2>/dev/null | xargs -n1 basename | head -n1 || echo "SkyDrop-android.apk")
+
+          echo "Generating clean release notes from git commit log for Android..."
+          PREV_TAG=$(git tag -l "android-v*" --sort=-v:refname | grep -v "^${RAW_TAG}$" | grep -v "^android-v${CLEAN_VERSION}$" | head -n 1 || true)
+          COMMITS=""
+          if [ -n "$PREV_TAG" ]; then
+            echo "Extracting Android commits since $PREV_TAG..."
+            COMMITS=$(git log "${PREV_TAG}..HEAD" --oneline -- Android-app || true)
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            echo "Extracting recent Android commits..."
+            COMMITS=$(git log -n 10 --oneline -- Android-app || true)
+          fi
+
+          NOTES_LIST=$(echo "$COMMITS" | sed -E 's/^[a-f0-9]+ //' | grep -vE '^(chore|ci|test|merge)' | sed -E 's/^[a-z]+(\([^\)]+\))?:\s*//' | awk '{print toupper(substr($0,1,1)) substr($0,2)}' | sed 's/^/- /' || true)
+
+          if [ -z "$NOTES_LIST" ]; then
+            NOTES_LIST="- Performance optimizations, in-app updater support, and connectivity enhancements."
+          fi
+
+          {
+            echo "## What's New in SkyDrop Android v${CLEAN_VERSION}"
+            echo ""
+            echo "$NOTES_LIST"
+            echo ""
+            echo "## Downloads"
+            echo "- **Android Mobile Package**: \`${APK_FILE}\`"
+            echo "- **Checksums**: \`sha256sums.txt\`"
+            echo ""
+            echo "Please verify all downloads against the included \`sha256sums.txt\` checksums file."
+          } > release_body.md
+
+          echo "Publishing release '$RELEASE_TITLE' ($RELEASE_TAG) to ${{ env.RELEASES_REPO }}..."
+          gh release create "$RELEASE_TAG" \
+            --repo "${{ env.RELEASES_REPO }}" \
+            --title "$RELEASE_TITLE" \
+            --notes-file release_body.md \
+            staging/*.apk \
+            staging/sha256sums.txt
