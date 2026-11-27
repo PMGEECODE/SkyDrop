@@ -173,40 +173,9 @@ class Updater {
         'Accept': 'application/vnd.github.v3+json'
       });
 
-      if (res.statusCode === 403) {
-        const rateLimitRemaining = res.headers['x-ratelimit-remaining'];
-        if (rateLimitRemaining === '0') {
-          return {
-            ok: false,
-            updateAvailable: false,
-            currentVersion,
-            error: 'GitHub API rate limit exceeded. Please try again later.'
-          };
-        }
-        return {
-          ok: false,
-          updateAvailable: false,
-          currentVersion,
-          error: `GitHub access denied (HTTP 403)`
-        };
-      }
-
-      if (res.statusCode === 404) {
-        return {
-          ok: false,
-          updateAvailable: false,
-          currentVersion,
-          error: `Release repository not found: ${this.repoOwner}/${this.repoName}`
-        };
-      }
-
       if (res.statusCode !== 200) {
-        return {
-          ok: false,
-          updateAvailable: false,
-          currentVersion,
-          error: `GitHub API error (HTTP ${res.statusCode})`
-        };
+        console.warn(`[Updater] GitHub API HTTP ${res.statusCode}, falling back to Atom feed...`);
+        return this.checkUpdateViaAtomFeed(options, currentVersion);
       }
 
       const body = await new Promise((resolve, reject) => {
@@ -292,14 +261,143 @@ class Updater {
 
       return updateData;
     } catch (err) {
-      console.warn('[Updater] Check failed:', err.message);
+      console.warn('[Updater] API Check failed, trying Atom feed fallback:', err.message);
+      return this.checkUpdateViaAtomFeed(options, currentVersion);
+    }
+  }
+
+  /**
+   * Fallback release check using GitHub releases Atom feed & expanded_assets.
+   * Resilient against unauthenticated GitHub API 403 rate limits.
+   */
+  async checkUpdateViaAtomFeed(options = {}, currentVersion) {
+    const atomUrl = `https://github.com/${this.repoOwner}/${this.repoName}/releases.atom`;
+    try {
+      const res = await this.requestWithRedirects(atomUrl, {
+        'User-Agent': 'SkyDrop-Desktop-App'
+      });
+      if (res.statusCode !== 200) {
+        return {
+          ok: false,
+          updateAvailable: false,
+          currentVersion,
+          error: `Failed to fetch releases feed (HTTP ${res.statusCode})`
+        };
+      }
+
+      const xml = await new Promise((resolve, reject) => {
+        let data = '';
+        res.on('data', (c) => (data += c));
+        res.on('end', () => resolve(data));
+        res.on('error', reject);
+      });
+
+      const entryBlocks = xml.split('<entry>').slice(1);
+      if (entryBlocks.length === 0) {
+        return {
+          ok: true,
+          updateAvailable: false,
+          currentVersion,
+          latestVersion: currentVersion,
+          message: 'No releases found in feed.'
+        };
+      }
+
+      const installType = this.getInstallationType();
+      let bestTag = '';
+      let bestVersion = '';
+      let bestTitle = '';
+      let bestTargetAsset = null;
+      let bestChecksumAsset = null;
+
+      for (const block of entryBlocks) {
+        const idMatch = block.match(/<id>[^<]*\/([^/<]+)<\/id>/) || block.match(/href="[^"]*\/releases\/tag\/([^"]+)"/);
+        const rawTag = idMatch ? idMatch[1].trim() : '';
+        if (!rawTag || rawTag.startsWith('tv-')) continue;
+
+        const titleMatch = block.match(/<title>([^<]+)<\/title>/);
+        const title = titleMatch ? titleMatch[1].trim() : rawTag;
+        const cleanTag = (rawTag || '').replace(/^desktop-v/i, '').replace(/^v/i, '').trim();
+
+        if (bestTargetAsset && compareVersions(cleanTag, bestVersion) <= 0) {
+          continue;
+        }
+
+        const expUrl = `https://github.com/${this.repoOwner}/${this.repoName}/releases/expanded_assets/${rawTag}`;
+        try {
+          const expRes = await this.requestWithRedirects(expUrl, {
+            'User-Agent': 'SkyDrop-Desktop-App'
+          });
+          if (expRes.statusCode === 200) {
+            const html = await new Promise((resolve, reject) => {
+              let d = '';
+              expRes.on('data', (c) => (d += c));
+              expRes.on('end', () => resolve(d));
+              expRes.on('error', reject);
+            });
+
+            const assetRegex = new RegExp(`href=["'](/${this.repoOwner}/${this.repoName}/releases/download/[^"']+)["']`, 'g');
+            let m;
+            const assetsList = [];
+            while ((m = assetRegex.exec(html)) !== null) {
+              const p = m[1];
+              const name = p.substring(p.lastIndexOf('/') + 1);
+              assetsList.push({
+                name,
+                downloadUrl: `https://github.com${p}`,
+                size: 0
+              });
+            }
+
+            const appImageAsset = assetsList.find((a) => a.name.toLowerCase().endsWith('.appimage'));
+            const debAsset = assetsList.find((a) => a.name.toLowerCase().endsWith('.deb'));
+            const exeAsset = assetsList.find((a) => a.name.toLowerCase().endsWith('.exe'));
+            const target = installType === 'exe'
+              ? (exeAsset || null)
+              : (installType === 'deb'
+                ? (debAsset || null)
+                : (appImageAsset || null));
+
+            if (target) {
+              bestTag = rawTag;
+              bestVersion = cleanTag;
+              bestTitle = title;
+              bestTargetAsset = target;
+              bestChecksumAsset = assetsList.find((a) => a.name.toLowerCase().includes('sha256') || a.name.toLowerCase().includes('checksum')) || null;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (bestTargetAsset) {
+        const isNewer = compareVersions(bestVersion, currentVersion) > 0;
+        const updateData = {
+          ok: true,
+          updateAvailable: isNewer,
+          currentVersion,
+          latestVersion: bestVersion,
+          releaseName: bestTitle || `v${bestVersion}`,
+          releaseNotes: 'Automatic background update available.',
+          releaseUrl: `https://github.com/${this.repoOwner}/${this.repoName}/releases/tag/${bestTag}`,
+          asset: bestTargetAsset,
+          checksumAsset: bestChecksumAsset
+        };
+        if (isNewer) this.pendingUpdate = updateData;
+        return updateData;
+      }
+
+      return {
+        ok: true,
+        updateAvailable: false,
+        currentVersion,
+        latestVersion: currentVersion
+      };
+    } catch (err) {
       return {
         ok: false,
         updateAvailable: false,
         currentVersion,
-        error: err.message.includes('ENOTFOUND') || err.message.includes('ECONNREFUSED')
-          ? 'No internet connection or server unreachable.'
-          : err.message
+        error: err.message
       };
     }
   }

@@ -52,6 +52,11 @@ contextBridge.exposeInMainWorld('skydrop', {
     ipcRenderer.on('update-available', subscription);
     return () => ipcRenderer.removeListener('update-available', subscription);
   },
+  onShowUpdatingStatus: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('show-updating-status', subscription);
+    return () => ipcRenderer.removeListener('show-updating-status', subscription);
+  },
   sendFile: (filePath, targetUrl, authToken) =>
     ipcRenderer.invoke('send-file', { filePath, targetUrl, authToken }),
   minimizeWindow: () => ipcRenderer.invoke('window-minimize'),

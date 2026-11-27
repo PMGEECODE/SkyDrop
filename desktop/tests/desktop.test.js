@@ -933,6 +933,59 @@ async function runTests() {
     console.log('  ✓ GitHub Actions release workflow, tag triggers, scoped directories, SHA-256 verification, and publication verified');
   }
 
+  // Test 27: Automated Background Updates, Desktop Popup Window & Post-Update Changelog Workflow Validation
+  {
+    console.log('[Test 27] Automated Background Updates, Desktop Popup & Post-Update Changelog validation...');
+
+    // 1. Verify popup preload bridge and UI template
+    const preloadPopupPath = path.join(__dirname, '../src/preload-popup.js');
+    assert(fs.existsSync(preloadPopupPath), 'preload-popup.js must exist');
+    const preloadPopupSrc = fs.readFileSync(preloadPopupPath, 'utf8');
+    assert(preloadPopupSrc.includes('updatePopup'), 'preload-popup.js must expose updatePopup');
+    assert(preloadPopupSrc.includes('startUpdate'), 'preload-popup.js must expose startUpdate');
+    assert(preloadPopupSrc.includes('dismissPopup'), 'preload-popup.js must expose dismissPopup');
+
+    const popupHtmlPath = path.join(__dirname, '../src/ui/update-popup.html');
+    assert(fs.existsSync(popupHtmlPath), 'update-popup.html must exist');
+    const popupHtml = fs.readFileSync(popupHtmlPath, 'utf8');
+    assert(popupHtml.includes('id="btn-update"'), 'update-popup.html missing btn-update');
+    assert(popupHtml.includes('id="progress-section"'), 'update-popup.html missing progress-section');
+    assert(popupHtml.includes('id="progress-fill"'), 'update-popup.html missing progress-fill');
+
+    // 2. Verify update-popup window manager
+    const popupManagerPath = path.join(__dirname, '../src/update-popup.js');
+    assert(fs.existsSync(popupManagerPath), 'update-popup.js must exist');
+    const popupManagerSrc = fs.readFileSync(popupManagerPath, 'utf8');
+    assert(popupManagerSrc.includes('showUpdatePopup'), 'update-popup.js missing showUpdatePopup export');
+    assert(popupManagerSrc.includes('sendDownloadProgressToPopup'), 'update-popup.js missing sendDownloadProgressToPopup');
+    assert(popupManagerSrc.includes('registerUpdatePopupIpc'), 'update-popup.js missing registerUpdatePopupIpc');
+
+    // 3. Verify main.js background update scheduler and installation sequence
+    const mainPath = path.join(__dirname, '../src/main.js');
+    const mainSrc = fs.readFileSync(mainPath, 'utf8');
+    assert(mainSrc.includes('checkUpdatesInBackground'), 'main.js must define checkUpdatesInBackground');
+    assert(mainSrc.includes('showUpdatePopup'), 'main.js must invoke showUpdatePopup');
+    assert(mainSrc.includes('show-updating-status'), 'main.js must dispatch show-updating-status to window');
+    assert(mainSrc.includes('updater.restartApp()'), 'main.js must restart app after installation');
+
+    // 4. Verify index.html overlays: updating status overlay and post-update changelog modal
+    const indexHtmlPath = path.join(__dirname, '../src/ui/index.html');
+    const indexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
+    assert(indexHtml.includes('id="updating-overlay"'), 'index.html missing updating-overlay');
+    assert(indexHtml.includes('id="changelog-modal"'), 'index.html missing changelog-modal');
+    assert(indexHtml.includes('id="btn-changelog-skip"'), 'index.html missing btn-changelog-skip');
+    assert(indexHtml.includes('id="auto-update-status-indicator"'), 'index.html missing auto-update-status-indicator');
+
+    // 5. Verify app.js changelog checking and updating listeners
+    const appJsPath = path.join(__dirname, '../src/ui/js/app.js');
+    const appJsSrc = fs.readFileSync(appJsPath, 'utf8');
+    assert(appJsSrc.includes('checkPostUpdateChangelog'), 'app.js missing checkPostUpdateChangelog');
+    assert(appJsSrc.includes('showChangelogModal'), 'app.js missing showChangelogModal');
+    assert(appJsSrc.includes('initUpdatingListeners'), 'app.js missing initUpdatingListeners');
+
+    console.log('  ✓ Automated background update check, desktop popup window, updating overlay, and post-update changelog verified');
+  }
+
   console.log('\n✅ All SkyDrop desktop tests passed successfully!');
   process.exit(0);
 }

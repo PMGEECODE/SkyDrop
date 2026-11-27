@@ -245,6 +245,11 @@ class SettingsView {
 
   displayUpdateAvailable(update) {
     this.pendingUpdate = update;
+    if (update && update.releaseNotes) {
+      try {
+        localStorage.setItem('skydrop-pending-notes', update.releaseNotes);
+      } catch (_) {}
+    }
     if (this.updateStatusBadge) {
       this.updateStatusBadge.textContent = `v${update.latestVersion} Available`;
       this.updateStatusBadge.style.color = 'var(--color-primary)';

@@ -34,9 +34,12 @@ class SkyDropApp {
     await this.refreshPeers();
     await this.refreshHistory();
     await this.settingsView.load();
+    await this.checkPostUpdateChangelog();
 
     setTimeout(() => this.updateTabIndicator(), 100);
     window.addEventListener('resize', () => this.updateTabIndicator());
+
+    this.initUpdatingListeners();
 
     // Polling loop for peers and history
     this.startPolling();
@@ -326,6 +329,120 @@ class SkyDropApp {
           }
         });
       }
+    }
+  }
+
+  compareVersions(v1, v2) {
+    const clean = (v) => (v || '').replace(/^[a-z-]+/i, '').replace(/^v/i, '').trim();
+    const s1 = clean(v1);
+    const s2 = clean(v2);
+    const [c1] = s1.split('-');
+    const [c2] = s2.split('-');
+    const p1 = c1.split('.').map((n) => parseInt(n, 10) || 0);
+    const p2 = c2.split('.').map((n) => parseInt(n, 10) || 0);
+    const len = Math.max(p1.length, p2.length);
+    for (let i = 0; i < len; i++) {
+      const a = p1[i] || 0;
+      const b = p2[i] || 0;
+      if (a > b) return 1;
+      if (a < b) return -1;
+    }
+    return 0;
+  }
+
+  async checkPostUpdateChangelog() {
+    try {
+      const currentVer = await window.skydrop.getAppVersion();
+      const lastVer = localStorage.getItem('skydrop-last-seen-version');
+
+      if (!lastVer) {
+        localStorage.setItem('skydrop-last-seen-version', currentVer);
+        return;
+      }
+
+      if (this.compareVersions(currentVer, lastVer) > 0) {
+        this.showChangelogModal(currentVer, lastVer);
+      }
+    } catch (err) {
+      console.warn('[SkyDropApp] Changelog check error:', err);
+    }
+  }
+
+  showChangelogModal(newVer, oldVer) {
+    const modal = document.getElementById('changelog-modal');
+    const versionTag = document.getElementById('changelog-version-tag');
+    const content = document.getElementById('changelog-content');
+    const btnSkip = document.getElementById('btn-changelog-skip');
+    const btnClose = document.getElementById('btn-changelog-close');
+
+    if (!modal) return;
+    if (versionTag) versionTag.textContent = `v${newVer}`;
+
+    const savedNotes = localStorage.getItem('skydrop-pending-notes');
+    let html = '';
+
+    if (savedNotes && savedNotes.trim().length > 10) {
+      html = `<div style="white-space: pre-line;">${savedNotes}</div>`;
+    } else {
+      html = `
+        <div class="changelog-list">
+          <div class="changelog-item">
+            <span class="changelog-item-icon">🔄</span>
+            <div class="changelog-item-text">
+              <h5>Automatic Background Updates</h5>
+              <p>SkyDrop now automatically checks for new releases in the background and delivers instant desktop notifications.</p>
+            </div>
+          </div>
+          <div class="changelog-item">
+            <span class="changelog-item-icon">⚡</span>
+            <div class="changelog-item-text">
+              <h5>Instant PIN Pairing & Focus</h5>
+              <p>PIN modal captures keyboard input and focus immediately with zero latency.</p>
+            </div>
+          </div>
+          <div class="changelog-item">
+            <span class="changelog-item-icon">📺</span>
+            <div class="changelog-item-text">
+              <h5>Enhanced TV & Mobile Synchronization</h5>
+              <p>Optimized mDNS discovery, live presence indicators, and seamless large file transfers.</p>
+            </div>
+          </div>
+          <div class="changelog-item">
+            <span class="changelog-item-icon">🛡️</span>
+            <div class="changelog-item-text">
+              <h5>Reliability & Performance</h5>
+              <p>Dynamic multi-release filtering, hardened daemon supervision, and refined dark UI.</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    if (content) content.innerHTML = html;
+    modal.style.display = 'flex';
+
+    const dismiss = () => {
+      localStorage.setItem('skydrop-last-seen-version', newVer);
+      localStorage.removeItem('skydrop-pending-notes');
+      modal.style.display = 'none';
+    };
+
+    if (btnSkip) btnSkip.onclick = dismiss;
+    if (btnClose) btnClose.onclick = dismiss;
+  }
+
+  initUpdatingListeners() {
+    if (window.skydrop && typeof window.skydrop.onShowUpdatingStatus === 'function') {
+      window.skydrop.onShowUpdatingStatus((data) => {
+        const overlay = document.getElementById('updating-overlay');
+        const text = document.getElementById('updating-overlay-text');
+        if (overlay) {
+          if (text && data && data.version) {
+            text.textContent = `Installing SkyDrop v${data.version}... The application will restart automatically.`;
+          }
+          overlay.style.display = 'flex';
+        }
+      });
     }
   }
 }

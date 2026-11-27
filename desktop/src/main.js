@@ -7,6 +7,12 @@ const { registerMediaProtocol } = require('./media-protocol');
 const { registerIpcHandlers } = require('./ipc-handlers');
 const AutostartManager = require('./autostart-manager');
 const { Updater } = require('./updater');
+const {
+  showUpdatePopup,
+  sendDownloadProgressToPopup,
+  closeUpdatePopup,
+  registerUpdatePopupIpc
+} = require('./update-popup');
 
 let mainWindow = null;
 let daemonManager = null;
@@ -126,26 +132,66 @@ app.whenReady().then(async () => {
   trayManager = new TrayManager(mainWindow);
   trayManager.init();
 
-  // If auto-check is enabled, trigger background update check
-  if (updater.isAutoCheckEnabled()) {
-    setTimeout(async () => {
-      try {
-        const update = await updater.checkGitHubUpdate();
-        if (update && update.ok && update.updateAvailable && mainWindow && !mainWindow.isDestroyed()) {
+  async function handleDownloadAndInstall(updateData) {
+    try {
+      const result = await updater.downloadAndInstall((progress) => {
+        sendDownloadProgressToPopup(progress);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-progress', progress);
+        }
+      });
+
+      if (result && result.ok) {
+        closeUpdatePopup();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+          mainWindow.focus();
+          mainWindow.webContents.send('show-updating-status', {
+            version: (updateData && updateData.latestVersion) || result.installedVersion || ''
+          });
+        }
+        setTimeout(() => {
+          updater.restartApp();
+        }, 1600);
+        return { ok: true };
+      }
+      return result;
+    } catch (err) {
+      console.error('[Updater] Download & install failed:', err);
+      return { ok: false, error: err.message };
+    }
+  }
+
+  registerUpdatePopupIpc(handleDownloadAndInstall);
+
+  async function checkUpdatesInBackground() {
+    try {
+      const update = await updater.checkGitHubUpdate();
+      if (update && update.ok && update.updateAvailable) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('update-available', update);
         }
-      } catch (err) {
-        console.warn('[Updater] Background check error:', err.message);
+        showUpdatePopup(update, handleDownloadAndInstall);
       }
-    }, 5000);
+    } catch (err) {
+      console.warn('[Updater] Background check error:', err.message);
+    }
   }
+
+  // Automatic background update checking: launch check after 3.5s
+  setTimeout(checkUpdatesInBackground, 3500);
+
+  // Periodic background update check every 1 hour
+  setInterval(checkUpdatesInBackground, 3600000);
 
   if (powerMonitor) {
     powerMonitor.on('resume', () => {
-      console.log('[powerMonitor] System resumed from sleep - re-announcing and probing peers');
+      console.log('[powerMonitor] System resumed from sleep - re-announcing and checking updates');
       if (daemonManager) {
         daemonManager.request('/api/presence/retry', { method: 'POST' }).catch(() => {});
       }
+      setTimeout(checkUpdatesInBackground, 8000);
     });
     powerMonitor.on('suspend', () => {
       console.log('[powerMonitor] System entering sleep');

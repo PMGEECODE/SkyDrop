@@ -13,8 +13,8 @@ android {
         applicationId = "com.famage.skydrop_tv_app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 4
-        versionName = "1.0.43"
+        versionCode = 5
+        versionName = "1.0.44"
 
     }
 
