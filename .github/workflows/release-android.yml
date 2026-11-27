@@ -38,15 +38,13 @@ jobs:
           fetch-depth: 0
 
       - name: Checkout Android App Submodule
-        env:
-          SUBMODULE_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
         run: |
           cd ..
           if [ -d "Android-app/.git" ] || [ -f "Android-app/build.gradle.kts" ]; then
             echo "Android-app workspace already populated."
           else
             echo "Cloning skydrop-app repository..."
-            git clone "https://${SUBMODULE_TOKEN}@github.com/PMGEECODE/skydrop-app.git" Android-app
+            git clone https://github.com/PMGEECODE/skydrop-app.git Android-app
           fi
 
       - name: Setup Java JDK
