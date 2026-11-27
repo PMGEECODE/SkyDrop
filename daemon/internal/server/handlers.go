@@ -809,20 +809,28 @@ func (s *Server) handlePairInitiate(w http.ResponseWriter, r *http.Request) {
 	// Poll status until accepted, declined, or timeout (up to 45 seconds)
 	statusURL := fmt.Sprintf("%s://%s:%d/pair/request/status?request_id=%s", scheme, body.Host, body.Port, resData.RequestID)
 	deadline := time.Now().Add(45 * time.Second)
+	pollInterval := 250 * time.Millisecond
+	firstCheck := true
 
 	for time.Now().Before(deadline) {
-		select {
-		case <-r.Context().Done():
-			// Cancel remote request if client disconnects
-			cancelURL := fmt.Sprintf("%s://%s:%d/pair/request/cancel", scheme, body.Host, body.Port)
-			cancelPayload, _ := json.Marshal(map[string]string{"request_id": resData.RequestID})
-			if cReq, cErr := http.NewRequest(http.MethodPost, cancelURL, bytes.NewReader(cancelPayload)); cErr == nil {
-				cReq.Header.Set("Content-Type", "application/json")
-				_, _ = client.Do(cReq)
+		if !firstCheck {
+			select {
+			case <-r.Context().Done():
+				// Cancel remote request if client disconnects
+				cancelURL := fmt.Sprintf("%s://%s:%d/pair/request/cancel", scheme, body.Host, body.Port)
+				cancelPayload, _ := json.Marshal(map[string]string{"request_id": resData.RequestID})
+				if cReq, cErr := http.NewRequest(http.MethodPost, cancelURL, bytes.NewReader(cancelPayload)); cErr == nil {
+					cReq.Header.Set("Content-Type", "application/json")
+					_, _ = client.Do(cReq)
+				}
+				return
+			case <-time.After(pollInterval):
+				if pollInterval < 1000*time.Millisecond {
+					pollInterval += 150 * time.Millisecond
+				}
 			}
-			return
-		case <-time.After(1500 * time.Millisecond):
 		}
+		firstCheck = false
 
 		stReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, statusURL, nil)
 		if err != nil {

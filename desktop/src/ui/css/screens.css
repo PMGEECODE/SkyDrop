@@ -200,7 +200,13 @@
   flex-direction: column;
   gap: 8px;
   margin-bottom: 14px;
-  max-height: 280px;
+  max-height: 350px;
+}
+
+.file-queue.drag-active {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: 4px;
+  border-radius: var(--radius-md);
 }
 
 .queue-toolbar {
@@ -251,7 +257,7 @@
   flex-direction: column;
   gap: 6px;
   overflow-y: auto;
-  max-height: 240px;
+  max-height: 300px;
   padding-right: 2px;
 }
 

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Deep Navy App Background matching SkyDrop theme -->
+    <item>
+        <color android:color="#0B0F19" />
+    </item>
+    <!-- Centered Brand Logo -->
+    <item
+        android:width="120dp"
+        android:height="120dp"
+        android:gravity="center"
+        android:drawable="@drawable/skydrop_logo" />
+</layer-list>

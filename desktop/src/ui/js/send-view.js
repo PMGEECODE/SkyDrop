@@ -4,6 +4,7 @@
 class SendView {
   constructor(app) {
     this.app = app;
+    this.screen = document.getElementById('screen-send');
     this.dropzone = document.getElementById('dropzone');
     this.queueContainer = document.getElementById('file-queue-container');
     this.targetSelect = document.getElementById('target-peer-select');
@@ -87,6 +88,34 @@ class SendView {
       });
     }
 
+    // Support drag-and-drop onto the screen even when the top dropzone is hidden
+    if (this.screen) {
+      this.screen.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'copy';
+        }
+        if (this.queuedFiles.length > 0 && this.queueContainer) {
+          this.queueContainer.classList.add('drag-active');
+        }
+      });
+
+      this.screen.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        if (!this.screen.contains(e.relatedTarget)) {
+          if (this.queueContainer) this.queueContainer.classList.remove('drag-active');
+        }
+      });
+
+      this.screen.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (this.queueContainer) this.queueContainer.classList.remove('drag-active');
+        if (e.dataTransfer && e.dataTransfer.files) {
+          processDroppedFiles(e.dataTransfer.files);
+        }
+      });
+    }
+
     if (this.customSelectTrigger) {
       this.customSelectTrigger.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -160,13 +189,15 @@ class SendView {
       this.queueContainer.style.display = 'none';
       this.queueContainer.innerHTML = '';
       if (this.dropzone) {
+        this.dropzone.style.display = 'flex';
         this.dropzone.classList.remove('compact');
       }
       if (warningEl) warningEl.style.display = 'none';
     } else {
       this.queueContainer.style.display = 'flex';
       if (this.dropzone) {
-        this.dropzone.classList.add('compact');
+        this.dropzone.style.display = 'none';
+        this.dropzone.classList.remove('compact');
       }
 
       const totalBytes = this.queuedFiles.reduce((sum, f) => sum + (f.size || 0), 0);

@@ -330,7 +330,9 @@ async function runTests() {
       'SendView must use getFileTypePresentation');
     assert(sendViewCode.includes('queue-card'), 'SendView must generate queue-card elements');
     assert(sendViewCode.includes('queue-thumb-box'), 'SendView must generate queue-thumb-box with icons/thumbnails');
-    console.log('  ✓ Diagnostics error/warning color coding and Send file thumbnails & icons verified');
+    assert(sendViewCode.includes("this.dropzone.style.display = 'none'"), 'SendView must hide dropzone when files are queued');
+    assert(sendViewCode.includes("this.dropzone.style.display = 'flex'"), 'SendView must show dropzone when queue is empty');
+    console.log('  ✓ Diagnostics error/warning color coding, dropzone auto-toggle, and Send file thumbnails & icons verified');
   }
 
   // Test 14: Auto-navigation to Received screen on inbound receive and send completion

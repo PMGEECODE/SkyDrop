@@ -1,4 +1,7 @@
-## What's New in v1.0.41
+## What's New in v1.0.42
+
+- **Pairing PIN Responsiveness**: Removed daemon status polling sleep latency and added immediate focus, inputmode, and key routing to the desktop PIN entry dialog.
+- **Dynamic Dropzone on Send Screen**: Automatically hides the dropzone when files are queued to reclaim vertical space, while preserving full drag-and-drop support across the entire screen.
 
 ### 🪟 Windows Desktop Support & NSIS Installer
 - **Official 64-bit Windows Installer**: Added `skydrop-1.0.41-win-x64-setup.exe` (NSIS installer) featuring Desktop shortcut, Start Menu integration, and clean uninstaller support.

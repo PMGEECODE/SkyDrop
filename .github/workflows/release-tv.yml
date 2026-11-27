@@ -1,0 +1,172 @@
+name: Release SkyDrop TV
+
+on:
+  push:
+    tags:
+      - 'tv-v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag or version to release (e.g. tv-v1.0.1 or 1.0.1)'
+        required: false
+        type: string
+        default: ''
+      dry_run:
+        description: 'Dry run: build and verify without publishing to public repo'
+        required: false
+        type: boolean
+        default: false
+
+# Restrict default GITHUB_TOKEN permissions
+permissions:
+  contents: read
+
+env:
+  RELEASES_REPO: ${{ vars.RELEASES_REPO || 'PMGEECODE/skydrop-release' }}
+
+jobs:
+  build-tv-apk:
+    name: Build Android TV APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: skydrop-tv-app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Validate version matches tag
+        run: |
+          RAW_TAG="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.tag_name }}" ]; then
+              RAW_TAG="${{ inputs.tag_name }}"
+            else
+              RAW_TAG="tv-v$(grep -oP 'versionName\s*=\s*"\K[^"]+' tv/build.gradle.kts)"
+            fi
+          fi
+          CLEAN_VERSION=$(echo "$RAW_TAG" | sed -E 's/^(tv-)?v//')
+          GRADLE_VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' tv/build.gradle.kts)
+
+          echo "Target tag: $RAW_TAG (parsed version: $CLEAN_VERSION)"
+          echo "tv/build.gradle.kts versionName: $GRADLE_VERSION"
+
+          if [ -n "$CLEAN_VERSION" ] && [ "$CLEAN_VERSION" != "$GRADLE_VERSION" ]; then
+            echo "::error::Tag version ($CLEAN_VERSION) does not match tv/build.gradle.kts versionName ($GRADLE_VERSION)!"
+            exit 1
+          fi
+          echo "✓ Version verification passed: $GRADLE_VERSION"
+
+      - name: Run TV Unit Tests
+        run: ./gradlew :tv:testDebugUnitTest
+
+      - name: Build Release APK
+        run: ./gradlew :tv:assembleRelease
+
+      - name: Stage TV APK and Compute Checksum
+        run: |
+          mkdir -p staging
+          RAW_TAG="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag_name }}" ]; then
+            RAW_TAG="${{ inputs.tag_name }}"
+          fi
+          CLEAN_VERSION=$(echo "$RAW_TAG" | sed -E 's/^(tv-)?v//')
+          if [ -z "$CLEAN_VERSION" ]; then
+            CLEAN_VERSION="1.0.1"
+          fi
+          APK_NAME="SkyDrop-tv-${CLEAN_VERSION}.apk"
+          cp tv/build/outputs/apk/release/tv-release.apk "staging/${APK_NAME}"
+          cd staging
+          sha256sum "${APK_NAME}" > sha256sums.txt
+          echo "Staged APK: ${APK_NAME}"
+          cat sha256sums.txt
+
+      - name: Upload TV build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tv-artifacts
+          path: |
+            skydrop-tv-app/staging/*.apk
+            skydrop-tv-app/staging/sha256sums.txt
+          if-no-files-found: error
+
+  publish-tv-release:
+    name: Publish TV Release to Public Repository
+    needs: [build-tv-apk]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create staging directory and download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: tv-artifacts
+          path: staging
+
+      - name: Publish Release to Public Repository
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          RAW_TAG="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag_name }}" ]; then
+            RAW_TAG="${{ inputs.tag_name }}"
+          fi
+          CLEAN_VERSION=$(echo "$RAW_TAG" | sed -E 's/^(tv-)?v//')
+          if [ -z "$CLEAN_VERSION" ]; then
+            CLEAN_VERSION="1.0.1"
+          fi
+          RELEASE_TAG="tv-v${CLEAN_VERSION}"
+          RELEASE_TITLE="SkyDrop TV v${CLEAN_VERSION}"
+
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "✓ Dry-run enabled. Skipping publication to public repository."
+            echo "Target Repo: ${{ env.RELEASES_REPO }}"
+            echo "Release Tag: $RELEASE_TAG"
+            echo "Release Title: $RELEASE_TITLE"
+            exit 0
+          fi
+
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Secret RELEASES_REPO_TOKEN is not set or empty! Please configure it in your repository secrets."
+            exit 1
+          fi
+
+          APK_FILE=$(ls staging/*.apk 2>/dev/null | xargs -n1 basename | head -n1 || echo "SkyDrop-tv.apk")
+
+          cat << EOF > release_body.md
+          ## What's New in SkyDrop TV v${CLEAN_VERSION}
+
+          - **Animated Splash Screen**: Features staggered animated entrance with brand logo and two-tone "SkyDrop" text (White & SkyBlue).
+          - **In-App GitHub Updater**: Automatically checks for updates, downloads, verifies SHA-256 integrity, and prompts installation for new TV releases using remote control D-pad navigation.
+          - **Media Preview Refinements**: Auto-hiding playback controls for video and image viewers with D-pad wake-up.
+          - **Background Transfer Progress**: Real-time progress overlay at the bottom-right of the screen during incoming transfers.
+
+          ## Downloads
+          - **Android TV Package**: \`${APK_FILE}\`
+          - **Checksums**: \`sha256sums.txt\`
+
+          Please verify all downloads against the included \`sha256sums.txt\` checksums file.
+          EOF
+
+          echo "Publishing release '$RELEASE_TITLE' ($RELEASE_TAG) to ${{ env.RELEASES_REPO }}..."
+          gh release create "$RELEASE_TAG" \
+            --repo "${{ env.RELEASES_REPO }}" \
+            --title "$RELEASE_TITLE" \
+            --notes-file release_body.md \
+            staging/*.apk \
+            staging/sha256sums.txt

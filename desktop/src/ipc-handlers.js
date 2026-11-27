@@ -42,7 +42,7 @@ async function getThumbnail(filePath) {
 /**
  * Helper to make JSON HTTP/HTTPS requests to the local Go daemon.
  */
-function requestDaemon(url, method = 'GET', body = null) {
+function requestDaemon(url, method = 'GET', body = null, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     const isHttps = url.startsWith('https');
     const client = isHttps ? https : http;
@@ -65,7 +65,7 @@ function requestDaemon(url, method = 'GET', body = null) {
         method,
         headers,
         agent: isHttps ? agent : undefined,
-        timeout: 10000
+        timeout: timeoutMs
       },
       (res) => {
         let raw = '';
@@ -245,7 +245,7 @@ function registerIpcHandlers(mainWindow, daemonManager, thumbnailManager, autost
   });
 
   ipcMain.handle('pair-initiate', async (_event, target) => {
-    return requestDaemon(`${getBase()}/api/pair/initiate`, 'POST', target || {});
+    return requestDaemon(`${getBase()}/api/pair/initiate`, 'POST', target || {}, 50000);
   });
 
   ipcMain.handle('pair-get-incoming', async () => {

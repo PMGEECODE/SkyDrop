@@ -229,7 +229,11 @@ class DevicesView {
         if (e.key === 'Enter') this.submitPairPin();
       });
       this.pinInputField.addEventListener('input', (e) => {
-        e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+        const cleaned = e.target.value.replace(/\D/g, '').slice(0, 6);
+        e.target.value = cleaned;
+        if (cleaned.length === 6) {
+          this.submitPairPin();
+        }
       });
     }
     if (this.btnPinCancel) {
@@ -237,9 +241,34 @@ class DevicesView {
     }
     if (this.pinInputModal) {
       this.pinInputModal.addEventListener('click', (e) => {
-        if (e.target === this.pinInputModal) this.closePinInputModal();
+        if (e.target === this.pinInputModal) {
+          this.closePinInputModal();
+        } else if (e.target && !e.target.closest('button')) {
+          this.focusPinInput();
+        }
       });
     }
+
+    // Auto-focus PIN field when typing numbers or pressing keys while PIN modal is active
+    window.addEventListener('keydown', (e) => {
+      if (!this.pinInputModal || !this.pinInputModal.classList.contains('active')) return;
+      if (e.key === 'Escape') {
+        this.closePinInputModal();
+        return;
+      }
+      if (this.pinInputField && document.activeElement !== this.pinInputField) {
+        if (/^[0-9]$/.test(e.key) || e.key === 'Backspace') {
+          this.pinInputField.focus();
+        }
+      }
+    });
+
+    // Re-focus PIN field when desktop window regains OS focus while modal is active
+    window.addEventListener('focus', () => {
+      if (this.pinInputModal && this.pinInputModal.classList.contains('active')) {
+        this.focusPinInput();
+      }
+    });
   }
 
   initPresenceListener() {
@@ -405,10 +434,32 @@ class DevicesView {
     }
     if (this.pinInputModal) {
       this.pinInputModal.classList.add('active');
-      if (this.pinInputField) {
-        setTimeout(() => this.pinInputField.focus(), 100);
-      }
+      this.focusPinInput();
     }
+  }
+
+  focusPinInput() {
+    if (!this.pinInputField) return;
+    try {
+      if (typeof window !== 'undefined' && typeof window.focus === 'function') {
+        window.focus();
+      }
+    } catch (_) {}
+    this.pinInputField.focus();
+    this.pinInputField.select();
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        if (this.pinInputField) {
+          this.pinInputField.focus();
+          this.pinInputField.select();
+        }
+      });
+    }
+    setTimeout(() => {
+      if (this.pinInputField && this.pinInputModal && this.pinInputModal.classList.contains('active')) {
+        this.pinInputField.focus();
+      }
+    }, 50);
   }
 
   closePinInputModal() {
