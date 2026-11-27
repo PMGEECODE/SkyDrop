@@ -69,8 +69,10 @@ fun TvMainScreen(
     val saveLocation by settingsStore.saveLocation.collectAsState()
     val themePreference by settingsStore.themePreference.collectAsState()
 
-    val presenceManager = TvReceiverService.activePresenceManager
-        ?: remember { TvPresenceManager(context, pairedStore).apply { start() } }
+    val presenceManager = remember {
+        TvReceiverService.activePresenceManager
+            ?: TvPresenceManager(context, pairedStore).apply { start() }
+    }
 
     val activePeers by presenceManager.peers.collectAsState()
     val incomingPairRequests by TvPairingManager.activeIncomingRequests.collectAsState()

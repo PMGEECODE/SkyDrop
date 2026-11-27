@@ -241,7 +241,10 @@ class TvPresenceManager(
                     }
                 } catch (_: Exception) {}
             }
-            updatePeerState(peer.id, PresenceState.OFFLINE)
+            val now = System.currentTimeMillis()
+            if (peer.lastSeenAt == 0L || (now - peer.lastSeenAt > 15000L)) {
+                updatePeerState(peer.id, PresenceState.OFFLINE)
+            }
         }
     }
 
@@ -361,7 +364,6 @@ class TvPresenceManager(
 
                     Log.i(TAG, "Discovered active peer: ${peer.name} ($host:$port, TLS=$explicitTls, Paired=${peer.isPaired})")
                     addOrUpdate(peer)
-                    publishPeers()
                 }
             }
         } catch (e: Exception) {
@@ -390,7 +392,6 @@ class TvPresenceManager(
                             )
                             Log.i(TAG, "Discovered fallback HTTP peer: ${peer.name} ($host:$port)")
                             addOrUpdate(peer)
-                            publishPeers()
                         }
                     }
                 } catch (_: Exception) {}
@@ -440,13 +441,40 @@ class TvPresenceManager(
                     authToken = null
                 )
             }
-        }.distinctBy { "${it.host}:${it.port}" }
-        .sortedWith(
-            compareByDescending<PeerStatus> { it.isPaired }
-                .thenByDescending { it.presenceState == PresenceState.ONLINE }
-                .thenBy { it.name }
-        )
+        }
 
-        _peers.value = combined
+        val sorted = combined.distinctBy { "${it.host}:${it.port}" }
+            .sortedWith(
+                compareByDescending<PeerStatus> { it.isPaired }
+                    .thenByDescending { it.presenceState == PresenceState.ONLINE }
+                    .thenBy { it.name }
+            )
+
+        if (arePeerListsMeaningfullyEqual(_peers.value, sorted)) {
+            return
+        }
+
+        _peers.value = sorted
+    }
+
+    private fun arePeerListsMeaningfullyEqual(oldList: List<PeerStatus>, newList: List<PeerStatus>): Boolean {
+        if (oldList.size != newList.size) return false
+        for (i in oldList.indices) {
+            val a = oldList[i]
+            val b = newList[i]
+            if (a.id != b.id ||
+                a.name != b.name ||
+                a.host != b.host ||
+                a.port != b.port ||
+                a.isPaired != b.isPaired ||
+                a.isConnected != b.isConnected ||
+                a.presenceState != b.presenceState ||
+                a.authToken != b.authToken ||
+                a.isTls != b.isTls
+            ) {
+                return false
+            }
+        }
+        return true
     }
 }

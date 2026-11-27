@@ -99,7 +99,7 @@ fun TvSettingsScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 2. Receive Mode Card (Listening on local Wi-Fi, port hidden)
-        item {
+        item(key = "receive_mode_card") {
             TvReceiveModeCard(
                 isActive = isReceiverActive,
                 onToggle = onToggleReceiver
@@ -107,7 +107,7 @@ fun TvSettingsScreen(
         }
 
         // 3. Quick Action Buttons Row (My QR & Manual Connect - camera scan removed for TV)
-        item {
+        item(key = "quick_actions_row") {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -129,7 +129,7 @@ fun TvSettingsScreen(
         }
 
         // 4. Section Header: Nearby & Paired Devices
-        item {
+        item(key = "nearby_devices_header") {
             Spacer(modifier = Modifier.height(2.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -152,7 +152,7 @@ fun TvSettingsScreen(
 
         // 4b. Devices List or Empty State
         if (peers.isEmpty()) {
-            item {
+            item(key = "empty_peers_box") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -180,7 +180,7 @@ fun TvSettingsScreen(
                 }
             }
         } else {
-            items(peers, key = { it.id }) { peer ->
+            items(peers, key = { "device_${it.id}_${it.host}_${it.port}" }) { peer ->
                 TvDeviceCard(
                     peer = peer,
                     onPairClick = { onPairClick(peer) },
@@ -191,7 +191,7 @@ fun TvSettingsScreen(
         }
 
         // 5. Appearance Card (System / Light / Dark Theme)
-        item {
+        item(key = "appearance_card") {
             TvAppearanceCard(
                 currentPreference = themePreference,
                 onPreferenceChange = onThemeChange
@@ -199,7 +199,7 @@ fun TvSettingsScreen(
         }
 
         // 6. Device & Storage Info Card
-        item {
+        item(key = "storage_info_card") {
             TvDeviceStorageInfoCard(
                 deviceName = deviceName,
                 saveLocation = saveLocation,
@@ -209,7 +209,7 @@ fun TvSettingsScreen(
         }
 
         // 7. Official SkyDrop Logo & Version Footer with Check for Updates action
-        item {
+        item(key = "footer_version_box") {
             val interactionSource = remember { MutableInteractionSource() }
             val isFocused by interactionSource.collectIsFocusedAsState()
 
