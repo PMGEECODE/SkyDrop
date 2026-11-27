@@ -59,13 +59,36 @@ try {
   fs.writeFileSync(gradleFile, content, 'utf8');
   console.log(`✓ Updated build.gradle.kts`);
 
+  // Update fallback strings in Kotlin files
+  const ktFiles = [
+    path.join(tvDir, 'tv/src/main/java/com/famage/skydrop_tv_app/receiver/TvReceiverServer.kt'),
+    path.join(tvDir, 'tv/src/main/java/com/famage/skydrop_tv_app/ui/screens/TvMainScreen.kt'),
+    path.join(tvDir, 'tv/src/main/java/com/famage/skydrop_tv_app/ui/screens/TvSettingsScreen.kt')
+  ];
+  for (const f of ktFiles) {
+    if (fs.existsSync(f)) {
+      let kt = fs.readFileSync(f, 'utf8');
+      kt = kt.replace(new RegExp(`"${currentName.replace('.', '\\.')}"`, 'g'), `"${newName}"`);
+      fs.writeFileSync(f, kt, 'utf8');
+    }
+  }
+
+  // Update RELEASE_NOTES.md header if it exists
+  const notesPath = path.join(tvDir, 'RELEASE_NOTES.md');
+  if (fs.existsSync(notesPath)) {
+    let notes = fs.readFileSync(notesPath, 'utf8');
+    notes = notes.replace(/^##\s+What's\s+New(\s+in\s+SkyDrop\s+TV\s+v[0-9.]+)?/im, `## What's New in SkyDrop TV v${newName}`);
+    fs.writeFileSync(notesPath, notes, 'utf8');
+    console.log(`✓ Synchronized skydrop-tv-app/RELEASE_NOTES.md to v${newName}`);
+  }
+
   // Run tests
   console.log('\n[SkyDrop TV Release] Verifying test suite...');
   execSync('./gradlew :tv:testDebugUnitTest', { cwd: tvDir, stdio: 'inherit' });
 
   // Stage and commit
   console.log('\n[SkyDrop TV Release] Committing release changes...');
-  execSync('git add skydrop-tv-app/tv/build.gradle.kts', { cwd: repoDir, stdio: 'inherit' });
+  execSync('git add skydrop-tv-app/tv/build.gradle.kts skydrop-tv-app/RELEASE_NOTES.md skydrop-tv-app/tv/src/main/java/com/famage/skydrop_tv_app/', { cwd: repoDir, stdio: 'inherit' });
   execSync(`git commit -m "chore(tv): release v${newName}"`, { cwd: repoDir, stdio: 'inherit' });
 
   // Create release tag

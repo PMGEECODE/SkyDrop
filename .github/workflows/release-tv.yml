@@ -163,20 +163,44 @@ jobs:
 
           APK_FILE=$(ls staging/*.apk 2>/dev/null | xargs -n1 basename | head -n1 || echo "SkyDrop-tv.apk")
 
-          cat << EOF > release_body.md
-          ## What's New in SkyDrop TV v${CLEAN_VERSION}
+          if [ -f "skydrop-tv-app/RELEASE_NOTES.md" ]; then
+            echo "Using skydrop-tv-app/RELEASE_NOTES.md for release body"
+            cat skydrop-tv-app/RELEASE_NOTES.md > release_body.md
+          else
+            echo "Generating clean release notes from git commit log for TV..."
+            PREV_TAG=$(git tag -l "tv-v*" --sort=-v:refname | grep -v "^${RAW_TAG}$" | grep -v "^tv-v${CLEAN_VERSION}$" | head -n 1 || true)
+            COMMITS=""
+            if [ -n "$PREV_TAG" ]; then
+              echo "Extracting TV commits since $PREV_TAG..."
+              COMMITS=$(git log "${PREV_TAG}..HEAD" --oneline -- skydrop-tv-app || true)
+            fi
 
-          - **Animated Splash Screen**: Features staggered animated entrance with brand logo and two-tone "SkyDrop" text (White & SkyBlue).
-          - **In-App GitHub Updater**: Automatically checks for updates, downloads, verifies SHA-256 integrity, and prompts installation for new TV releases using remote control D-pad navigation.
-          - **Media Preview Refinements**: Auto-hiding playback controls for video and image viewers with D-pad wake-up.
-          - **Background Transfer Progress**: Real-time progress overlay at the bottom-right of the screen during incoming transfers.
+            if [ -z "$COMMITS" ]; then
+              echo "Extracting recent TV commits..."
+              COMMITS=$(git log -n 10 --oneline -- skydrop-tv-app || true)
+            fi
 
-          ## Downloads
-          - **Android TV Package**: \`${APK_FILE}\`
-          - **Checksums**: \`sha256sums.txt\`
+            NOTES_LIST=$(echo "$COMMITS" | sed -E 's/^[a-f0-9]+ //' | grep -vE '^(chore|ci|test|merge)' | sed -E 's/^[a-z]+(\([^\)]+\))?:\s*//' | awk '{print toupper(substr($0,1,1)) substr($0,2)}' | sed 's/^/- /' || true)
 
-          Please verify all downloads against the included \`sha256sums.txt\` checksums file.
-          EOF
+            if [ -z "$NOTES_LIST" ]; then
+              NOTES_LIST="- Performance optimizations, remote navigation improvements, and stability enhancements."
+            fi
+
+            {
+              echo "## What's New in SkyDrop TV v${CLEAN_VERSION}"
+              echo ""
+              echo "$NOTES_LIST"
+            } > release_body.md
+          fi
+
+          {
+            echo ""
+            echo "## Downloads"
+            echo "- **Android TV Package**: \`${APK_FILE}\`"
+            echo "- **Checksums**: \`sha256sums.txt\`"
+            echo ""
+            echo "Please verify all downloads against the included \`sha256sums.txt\` checksums file."
+          } >> release_body.md
 
           echo "Publishing release '$RELEASE_TITLE' ($RELEASE_TAG) to ${{ env.RELEASES_REPO }}..."
           gh release create "$RELEASE_TAG" \

@@ -101,6 +101,8 @@ class TvUpdateService(
                     if (rel.optBoolean("draft", false)) continue
 
                     val tagName = rel.optString("tag_name", rel.optString("name", ""))
+                    val lowerTag = tagName.lowercase()
+                    if (lowerTag.isNotBlank() && !lowerTag.startsWith("tv-") && !lowerTag.startsWith("tv_")) continue
                     val cleanTag = TvVersionComparator.cleanVersion(tagName)
 
                     val assetsJson = rel.optJSONArray("assets") ?: JSONArray()
@@ -209,7 +211,8 @@ class TvUpdateService(
                 val tagMatch = Regex("<id>[^<]*/([^/<]+)</id>").find(block)
                     ?: Regex("href=\"[^\"]*/releases/tag/([^\"]+)\"").find(block)
                 val rawTag = tagMatch?.groupValues?.get(1)?.trim().orEmpty()
-                if (rawTag.isBlank()) continue
+                val lowerTag = rawTag.lowercase()
+                if (lowerTag.isBlank() || (!lowerTag.startsWith("tv-") && !lowerTag.startsWith("tv_"))) continue
 
                 val titleMatch = Regex("<title>([^<]+)</title>").find(block)
                 val rawTitle = titleMatch?.groupValues?.get(1)?.trim().orEmpty()

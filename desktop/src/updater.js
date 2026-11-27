@@ -190,10 +190,12 @@ class Updater {
         releases = [releases];
       }
 
-      // Filter drafts and (optionally) prereleases
+      // Filter drafts, (optionally) prereleases, and strictly exclude TV releases (tv-v*)
       const validReleases = releases.filter((r) => {
         if (!r || r.draft) return false;
         if (r.prerelease && !includePrereleases) return false;
+        const tag = (r.tag_name || r.name || '').toLowerCase();
+        if (tag.startsWith('tv-') || tag.startsWith('tv_')) return false;
         return true;
       });
 
