@@ -98,9 +98,9 @@ fun TvMainScreen(
                 @Suppress("DEPRECATION")
                 context.packageManager.getPackageInfo(context.packageName, 0)
             }
-            pInfo.versionName ?: "1.0.44"
+            pInfo.versionName ?: "1.0.45"
         } catch (_: Exception) {
-            "1.0.44"
+            "1.0.45"
         }
     }
 
