@@ -83,9 +83,9 @@ fun TvSettingsScreen(
                     @Suppress("DEPRECATION")
                     context.packageManager.getPackageInfo(context.packageName, 0)
                 }
-                pInfo.versionName ?: "1.0.42"
+                pInfo.versionName ?: "1.0.43"
             } catch (_: Exception) {
-                "1.0.42"
+                "1.0.43"
             }
         }
     }
