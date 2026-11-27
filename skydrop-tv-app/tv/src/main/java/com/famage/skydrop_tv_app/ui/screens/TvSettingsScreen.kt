@@ -98,13 +98,6 @@ fun TvSettingsScreen(
             .padding(horizontal = 32.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 1. Active Paired Device Status Banner (clean connected badge, no drop button, port hidden)
-        if (activeConnected != null) {
-            item {
-                TvActivePairedBanner(peer = activeConnected)
-            }
-        }
-
         // 2. Receive Mode Card (Listening on local Wi-Fi, port hidden)
         item {
             TvReceiveModeCard(

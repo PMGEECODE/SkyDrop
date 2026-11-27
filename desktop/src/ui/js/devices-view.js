@@ -678,18 +678,9 @@ class DevicesView {
       }
     }
 
-    // Top Connection Banner
-    const activeConnected = peers.find((p) => p.is_paired && p.is_connected);
-    if (activeConnected) {
-      this.banner.className = 'status-banner connected';
-      const latText = activeConnected.latency_ms ? ` (${activeConnected.latency_ms}ms)` : '';
-      this.banner.innerHTML = `<span role="status">🟢</span> <span>Connected to ${escapeHtml(activeConnected.name)}${latText} • Ready for drops</span>`;
-    } else if (peers.length > 0) {
-      this.banner.className = 'status-banner connected';
-      this.banner.innerHTML = `<span role="status">🟢</span> <span>${peers.length} peer(s) found on local network</span>`;
-    } else {
-      this.banner.className = 'status-banner offline';
-      this.banner.innerHTML = `<span role="status">⚪</span> <span>Searching local network for peers...</span>`;
+    // Top Connection Banner (hidden to prevent inaccurate single-device status when multiple peers are connected)
+    if (this.banner) {
+      this.banner.style.display = 'none';
     }
 
     // Render Paired Devices
