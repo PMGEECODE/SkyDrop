@@ -20,13 +20,32 @@ android {
 
     signingConfigs {
         create("debugConfig") {
-            val rootKeystore = file("${rootDir}/../Android-app/debug.keystore")
             val localKeystore = file("${rootDir}/debug.keystore")
+            val rootKeystore = file("${rootDir}/../Android-app/debug.keystore")
             val homeKeystore = file("${System.getProperty("user.home")}/.android/debug.keystore")
             storeFile = when {
                 localKeystore.exists() -> localKeystore
                 rootKeystore.exists() -> rootKeystore
-                else -> homeKeystore
+                homeKeystore.exists() -> homeKeystore
+                else -> {
+                    if (!localKeystore.exists()) {
+                        localKeystore.parentFile?.mkdirs()
+                        try {
+                            ProcessBuilder(
+                                "keytool", "-genkeypair", "-v",
+                                "-keystore", localKeystore.absolutePath,
+                                "-storepass", "android",
+                                "-keypass", "android",
+                                "-alias", "androiddebugkey",
+                                "-keyalg", "RSA",
+                                "-keysize", "2048",
+                                "-validity", "10000",
+                                "-dname", "CN=Android Debug,O=Android,C=US"
+                            ).inheritIO().start().waitFor()
+                        } catch (_: Exception) {}
+                    }
+                    if (localKeystore.exists()) localKeystore else homeKeystore
+                }
             }
             storePassword = "android"
             keyAlias = "androiddebugkey"
