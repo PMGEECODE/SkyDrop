@@ -58,4 +58,14 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        TvReceiverService.isAppInForeground = true
+    }
+
+    override fun onStop() {
+        super.onStop()
+        TvReceiverService.isAppInForeground = false
+    }
 }

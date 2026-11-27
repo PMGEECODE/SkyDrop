@@ -58,6 +58,8 @@ class TvReceiverService : Service() {
         private val _latestAlertMessage = MutableStateFlow<String?>(null)
         val latestAlertMessage: StateFlow<String?> = _latestAlertMessage.asStateFlow()
 
+        var isAppInForeground: Boolean = false
+
         var activeServer: TvReceiverServer? = null
             private set
 
@@ -99,6 +101,7 @@ class TvReceiverService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var multicastLock: WifiManager.MulticastLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var systemOverlayManager: TvSystemOverlayManager? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -108,6 +111,7 @@ class TvReceiverService : Service() {
         TvNotificationHelper.createChannels(this)
         startForeground(NOTIFICATION_ID_PERSISTENT, TvNotificationHelper.buildPersistentNotification(this, 8444))
         acquireMulticastLock()
+        systemOverlayManager = TvSystemOverlayManager(applicationContext)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -147,11 +151,18 @@ class TvReceiverService : Service() {
                     _latestAlertMessage.value = alertMsg
                     TvNotificationHelper.showTvToast(applicationContext, "⬇ SkyDrop: $alertMsg")
                     TvNotificationHelper.showIncomingFileNotification(applicationContext, filename, senderName, totalBytes, 0)
+                    if (!isAppInForeground) {
+                        systemOverlayManager?.updateProgress(TvReceiveProgress(filename, 0L, totalBytes, 0))
+                    }
                 }
                 onReceiveProgress = { filename, bytesRead, totalBytes, percent ->
-                    _activeReceiveProgress.value = TvReceiveProgress(filename, bytesRead, totalBytes, percent)
+                    val progress = TvReceiveProgress(filename, bytesRead, totalBytes, percent)
+                    _activeReceiveProgress.value = progress
                     acquireTransientWakeLock(5000L)
                     TvNotificationHelper.updateTransferNotification(applicationContext, filename, totalBytes, percent)
+                    if (!isAppInForeground) {
+                        systemOverlayManager?.updateProgress(progress)
+                    }
                 }
                 onFileReceived = { file ->
                     _activeReceiveProgress.value = null
@@ -160,6 +171,9 @@ class TvReceiverService : Service() {
                     TvNotificationHelper.cancelIncomingNotification(applicationContext)
                     TvNotificationHelper.showTvToast(applicationContext, "✓ SkyDrop: Received ${file.name}")
                     TvNotificationHelper.showFileReceivedNotification(applicationContext, file)
+                    if (!isAppInForeground) {
+                        systemOverlayManager?.showCompletion("✓ Received ${file.name}")
+                    }
                 }
                 onTextReceived = { text, sender ->
                     val preview = if (text.length > 25) text.take(25) + "..." else text
@@ -258,6 +272,8 @@ class TvReceiverService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.i(TAG, "TvReceiverService onDestroy")
+        systemOverlayManager?.destroy()
+        systemOverlayManager = null
         stopReceiver()
         serviceScope.cancel()
     }

@@ -116,7 +116,7 @@ fun TvSidebar(
 
 /**
  * Remote D-Pad focusable icon navigation button.
- * Responds to single D-Pad click immediately.
+ * Automatically navigates to the screen on focus traversal without requiring an OK/Center click.
  */
 @Composable
 private fun TvSidebarIconButton(
@@ -127,6 +127,13 @@ private fun TvSidebarIconButton(
     val view = LocalView.current
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
+
+    // When navigated to with TV remote D-Pad, automatically activate the screen
+    LaunchedEffect(isFocused) {
+        if (isFocused && !isSelected) {
+            onClick()
+        }
+    }
 
     val backgroundColor = when {
         isFocused -> TvBgElevated
